@@ -5,7 +5,7 @@ Inputs:
 
 Outputs:
 #1 Fastq files (2 files for paired samples)
-#2 Metadata conversion of SRA data to PATRIC. Modelled after https://github.com/PATRIC3/p3diffexp/tree/master/test
+#2 Metadata conversion of SRA data to PATRIC. Conforms to https://github.com/PATRIC3/p3diffexp/tree/master/test
 
 This program will:
 #1 Use the given SRA accession and NCBI fastq dump to download fastq files and associated metadata
