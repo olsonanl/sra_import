@@ -15,8 +15,7 @@ For SRR accession only fastq files will be created (no experiment level metadata
 
 # Notes
 
-1. [SRA toolkit](https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?view=software)
-   Use fastq-dump, set flag for split files and flag for <special machine>.
+1. [SRA toolkit](https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?view=software) Use fastq-dump, set flag for split files.
 
 2. "Runs" are each 2 paired fastq files.
 
@@ -37,13 +36,41 @@ For SRR accession only fastq files will be created (no experiment level metadata
   * [https://www.ncbi.nlm.nih.gov/sra/DRX019545[accn]](https://www.ncbi.nlm.nih.gov/sra/DRX019545[accn])
 
 5. Sample SQL grabbing similar metadata fields for all runs for the study:
-```select run_accession, experiment_accession, study_accession, description, sample_attribute from sra where study_accession = 'DRP003075';```
+```
+select run_accession, experiment_accession, study_accession, description, sample_attribute from sra where study_accession = 'DRP003075';
+```
 
 6. [FangFang's method for getting files](https://github.com/TheSEED/app_service/blob/master/scripts/App-GenomeAssembly.pl#L245-L268)
 
 7. [Bruce's method for getting files](https://github.com/SEEDtk/kernel/blob/master/scripts/p3-download-samples.pl)
 
-8.
    `Q`: Bruce, are you currently pulling any of the seedtk/kernel stuff into CVS? I see SRAlib.pm is already there; if we can add p3-dowload-samples then it’ll be available to the backend services.
 
    `A`: The p3 scripts that are in kernel generally won’t work without additional software. In the case of this particular script, it’s the NCBI’s SRA toolkit, a marauding monster that steals copious amounts of disk space under the covers. I can put it in CVS, but the code that hunts for the location of the SRA toolkit is SEEDtk-dependent. We would need to come up with an alternative strategy.
+
+9. `Q`: How should we handle fastq-dump binary?  
+   `A`: Need to ask Bob to install.
+
+10. There is now a  [fasterq-dump](https://github.com/ncbi/sra-tools/wiki/HowTo:-fasterq-dump). From thier wiki:
+
+   _With release 2.9.1 of sra-tools we have finally made available the tool fasterq-dump, a replacement for the much older fastq-dump tool. As its name implies, it runs faster, and is better suited for large-scale conversion of SRA objects into FASTQ files that are common on sites with enough disk space for temporary files. fasterq-dump is multi-threaded and performs bulk joins in a way that improves performance as compared to fastq-dump, which performs joins on a per-record basis (and is single-threaded). fastq-dump is still supported as it handles more corner cases than fasterq-dump, but it is likely to be deprecated in the future._
+
+11. [A sample Perl wrapper for a PATRIC service](https://github.com/TheSEED/app_service/blob/master/scripts/App-TnSeq.pl) and [the Python thing it wraps](https://github.com/PATRIC3/p3_tnseq/blob/master/scripts/p3_tnseq.py)
+
+12. Old command:
+   ```
+   fastq-dump -outdir tmp --skip-technical --readids --read-filter pass --dumpbase --split-3 --clip
+   ```
+
+   * split-3 is the default now
+   * skip-technical is the default now
+   * there is no readids (append read id after spot id as
+ 'accession.spot.readid' on defline)
+   * there is no read-filter (Filters Applied to spots when --split-spot is not set, otherwise - to individual reads; Split into files by READ_FILTER value pass|reject|criteria|redacted)
+   * there is no dumpbase (formats sequence using base space, which was default for all except SOLiD)
+   * there is no clip (Full Spot Filters Applied to the full spot independently - apply left and right clips)
+
+   New command:
+   ```
+   fasterq-dump --outdir tmp --split-files
+   ```
