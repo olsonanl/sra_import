@@ -19,7 +19,7 @@ For SRR accession only fastq files will be created (no experiment level metadata
 
 2. "Runs" are each 2 paired fastq files.
 
-3. [SRA metadata SQL lite file](https://s3.amazonaws.com/starbuck1/sradb/SRAmetadb.sqlite.gz)
+3. SRA metadata.  [From EdwardsLab](https://edwards.sdsu.edu/research/sra-metadata/). From Alan: [SRA metadata SQL lite file](https://s3.amazonaws.com/starbuck1/sradb/SRAmetadb.sqlite.gz)
    There is one table, named sra, which flattens out data from other tables into one giant row per 'run_accession' (eg. SRRnnnnn)
 
    Key fields are:
@@ -74,3 +74,5 @@ select run_accession, experiment_accession, study_accession, description, sample
    ```
    fasterq-dump --outdir tmp --split-files
    ```
+
+13. fasterq-dump doesn't have an easy "pass" read-filter like fastq-dump does.  It does have a "filter by bases" option.  
