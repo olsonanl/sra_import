@@ -39,11 +39,11 @@ For SRR accession only fastq files will be created (no experiment level metadata
 5. Sample SQL grabbing similar metadata fields for all runs for the study:
 ```select run_accession, experiment_accession, study_accession, description, sample_attribute from sra where study_accession = 'DRP003075';```
 
-6. [FangFang's method for getting files](https://github.com/TheSEED/app_service/blob/master/scripts/App-GenomeAssembly.pl#L245-L252)
+6. [FangFang's method for getting files](https://github.com/TheSEED/app_service/blob/master/scripts/App-GenomeAssembly.pl#L245-L268)
 
 7. [Bruce's method for getting files](https://github.com/SEEDtk/kernel/blob/master/scripts/p3-download-samples.pl)
 
-8. 
+8.
    `Q`: Bruce, are you currently pulling any of the seedtk/kernel stuff into CVS? I see SRAlib.pm is already there; if we can add p3-dowload-samples then it’ll be available to the backend services.
 
    `A`: The p3 scripts that are in kernel generally won’t work without additional software. In the case of this particular script, it’s the NCBI’s SRA toolkit, a marauding monster that steals copious amounts of disk space under the covers. I can put it in CVS, but the code that hunts for the location of the SRA toolkit is SEEDtk-dependent. We would need to come up with an alternative strategy.
