@@ -76,3 +76,15 @@ select run_accession, experiment_accession, study_accession, description, sample
    ```
 
 13. fasterq-dump doesn't have an easy "pass" read-filter like fastq-dump does.  It does have a "filter by bases" option.  
+
+14. Check in on whether there's caching or temp files that will need to be cleaned up.  I know it cleans up the temp files (and we can control where they are), but is there any kind of additional caching?
+
+15. Maulik:
+  * Find all the samples and read runs using SRA Study Accession: [1](https://www.ncbi.nlm.nih.gov/Traces/study/?acc=SRP039561)  [2](https://www.ncbi.nlm.nih.gov/Traces/study/?acc=SRP100071)
+  * Use the run table available from the links above to pull sample names
+and other basic metadata (i.e. organism name, taxonomy, etc) and present it
+to user in a way that can be used to prepare labels for job input.
+  * Use the run list to retrieve all the run accessions and corresponding read files from SRA:
+   ```
+   fastq-dump -I --skip-technical --split-files --gzip SRR5660159
+   ```
