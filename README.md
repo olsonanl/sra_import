@@ -15,6 +15,10 @@ For SRR accession only fastq files will be created (no experiment level metadata
 
 # Notes
 
+0. A project (SRP) has one or more samples. However, projects are in the table called study.
+A sample (SRS) has one or more experiments (SRX).
+An experiment has one or more runs (SRR).
+
 1. [SRA toolkit](https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?view=software) Use fastq-dump, set flag for split files.
 
 2. "Runs" are each 2 paired fastq files.
@@ -87,4 +91,18 @@ to user in a way that can be used to prepare labels for job input.
   * Use the run list to retrieve all the run accessions and corresponding read files from SRA:
    ```
    fastq-dump -I --skip-technical --split-files --gzip SRR5660159
+   ```
+
+16. Seems like we can get the runs for a study with:
+   ```
+   curl 'https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=runinfo&term=SRP039561' | grep SRP039561 | cut -f1 -d","
+
+   curl 'https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=runinfo&term=SRP100071' | grep SRP100071 | cut -f1 -d","
+
+   curl 'https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=runinfo&term=SRX2568064' | grep 'SRX2568064' | cut -f1 -d","
+   ```
+
+17. Then, you can get run metadata for an id (or list of ids) like this:
+   ```
+   curl 'https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=runinfo&term=(SRR1185914)OR(SRR1185915)'
    ```
