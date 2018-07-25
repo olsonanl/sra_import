@@ -16,8 +16,10 @@ For SRR accession only fastq files will be created (no experiment level metadata
 # Notes
 
 0. A project (SRP) has one or more samples. However, projects are in the table called study.
-A sample (SRS) has one or more experiments (SRX).
-An experiment has one or more runs (SRR).
+
+  A sample (SRS) has one or more experiments (SRX).
+
+  An experiment has one or more runs (SRR).
 
 1. [SRA toolkit](https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?view=software) Use fastq-dump, set flag for split files.
 
@@ -40,9 +42,9 @@ An experiment has one or more runs (SRR).
   * [https://www.ncbi.nlm.nih.gov/sra/DRX019545[accn]](https://www.ncbi.nlm.nih.gov/sra/DRX019545[accn])
 
 5. Sample SQL grabbing similar metadata fields for all runs for the study:
-```
-select run_accession, experiment_accession, study_accession, description, sample_attribute from sra where study_accession = 'DRP003075';
-```
+  ```
+  select run_accession, experiment_accession, study_accession, description, sample_attribute from sra where study_accession = 'DRP003075';
+  ```
 
 6. [FangFang's method for getting files](https://github.com/TheSEED/app_service/blob/master/scripts/App-GenomeAssembly.pl#L245-L268)
 
@@ -152,3 +154,41 @@ to user in a way that can be used to prepare labels for job input.
    * Consent
    * RunHash
    * ReadHash
+
+17. Want to create a similar JSON file to use as input to RNA-Seq:
+  ```
+  {
+      "output_path": "/anwarren@patricbrc.org/home/test",
+      "output_file": "easter",
+      "recipe": "RNA-Rocket",
+      "reference_genome_id": "205918.60",
+      "contrasts": [
+          [
+              1,
+              2
+          ]
+      ],
+      "paired_end_libs": [
+          {
+              "condition": 1,
+              "read1": "/anwarren@patricbrc.org/home/reads/bau_sim_R1.fq.gz",
+              "read2": "/anwarren@patricbrc.org/home/MSK/bau_sim_R2.fq"
+          },
+          {
+              "condition": 2,
+              "read1": "/anwarren@patricbrc.org/home/MSK/bau_sim_R2.fq",
+              "read2": "/anwarren@patricbrc.org/home/reads/bau_sim_R1.fq.gz"
+          }
+      ],
+      "experimental_conditions": [
+          "hey",
+          "hey1"
+      ],
+      "single_end_libs": [
+          {
+              "condition": 2,
+              "read": "/anwarren@patricbrc.org/home/rnaseq_test/MHB_R1.fq.gz"
+          }
+      ]
+  }
+  ```
