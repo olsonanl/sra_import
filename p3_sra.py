@@ -120,7 +120,9 @@ def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly
     print json.dumps(run_metadata, indent=1)
 
     # ===== 3. Get the metadata for the study
-
+    ### XXX Need to call the new method and rectify metadata... there are probably
+    ### redundant calls and we can get everything we need with the docset call.  Then,
+    ### we need to pack the json output.
 
     # ===== 4. Get the fastq files for each run
     if not metaonly:
