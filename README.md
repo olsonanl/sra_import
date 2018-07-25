@@ -93,16 +93,62 @@ to user in a way that can be used to prepare labels for job input.
    fastq-dump -I --skip-technical --split-files --gzip SRR5660159
    ```
 
-16. Seems like we can get the runs for a study with:
+16. We can get the runs for a study with (works with SRP, SRX, and SRR):
    ```
    curl 'https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=runinfo&term=SRP039561' | grep SRP039561 | cut -f1 -d","
 
-   curl 'https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=runinfo&term=SRP100071' | grep SRP100071 | cut -f1 -d","
-
    curl 'https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=runinfo&term=SRX2568064' | grep 'SRX2568064' | cut -f1 -d","
-   ```
 
-17. Then, you can get run metadata for an id (or list of ids) like this:
-   ```
+   curl 'https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=runinfo&term=SRR1185914' | grep 'SRR1185914' | cut -f1 -d","
+
    curl 'https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=runinfo&term=(SRR1185914)OR(SRR1185915)'
    ```
+
+   Fields returned:
+   * Run
+   * ReleaseDate
+   * LoadDate
+   * spots
+   * bases
+   * spots_with_mates
+   * avgLength
+   * size_MB
+   * AssemblyName
+   * download_path
+   * Experiment
+   * LibraryName
+   * LibraryStrategy
+   * LibrarySelection
+   * LibrarySource
+   * LibraryLayout
+   * InsertSize
+   * InsertDev
+   * Platform
+   * Model
+   * SRAStudy
+   * BioProject
+   * Study_Pubmed_id
+   * ProjectID
+   * Sample
+   * BioSample
+   * SampleType
+   * TaxID
+   * ScientificName
+   * SampleName
+   * g1k_pop_code
+   * source
+   * g1k_analysis_group
+   * Subject_ID
+   * Sex
+   * Disease
+   * Tumor
+   * Affection_Status
+   * Analyte_Type
+   * Histological_Type
+   * Body_Site
+   * CenterName
+   * Submission
+   * dbgap_study_accession
+   * Consent
+   * RunHash
+   * ReadHash
