@@ -47,6 +47,7 @@ def get_accession_metadata(accession_id):
         exp['sample_id'] = sample.attrib['accession']
         exp['sample_description'] = sample.xpath('DESCRIPTION/text()')[0]
         exp['sample_organism'] = sample.xpath('SAMPLE_NAME/SCIENTIFIC_NAME/text()')[0]
+        exp['sample_taxon'] = sample.xpath('SAMPLE_NAME/TAXON_ID/text()')[0]
         sample_attrib_tags = sample.xpath('SAMPLE_ATTRIBUTES/SAMPLE_ATTRIBUTE/TAG/text()')
         sample_attrib_vals = sample.xpath('SAMPLE_ATTRIBUTES/SAMPLE_ATTRIBUTE/VALUE/text()')
         sample_attribs = zip(sample_attrib_tags, sample_attrib_vals)
@@ -104,7 +105,7 @@ def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly
     print json.dumps(metadata, indent=1)
 
     # ===== 2. Pack it into the output JSON
-    
+
 
     # ===== 3. Get the fastq files for each run
     if not metaonly:

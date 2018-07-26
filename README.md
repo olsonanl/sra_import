@@ -105,7 +105,6 @@ to user in a way that can be used to prepare labels for job input.
 
    curl 'https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=runinfo&term=(SRR1185914)OR(SRR1185915)'
    ```
-
    Fields returned:
    * Run
    * ReleaseDate
@@ -192,3 +191,8 @@ to user in a way that can be used to prepare labels for job input.
       ]
   }
   ```
+
+  18. We can get a lot more metadata from the 'docset' call:
+     ```
+     curl -s 'https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=docset&term=DRR021383'
+     ```
