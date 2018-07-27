@@ -82,17 +82,23 @@ def get_run_ids(run_meta):
         run_ids.append(run['run_id'])
     return run_ids
 
-def download_fastq_files(fasterq_dump_loc, output_dir, run_ids, gzip_output=True):
+def download_fastq_files(fastq_dump_loc, output_dir, run_ids, gzip_output=True, use_fastq_dump=False):
 
-    fasterq_dump_cmd_template = Template('$fasterq_dump_bin --outdir $out_dir --split-files -f $id | gzip')
+    if use_fastq_dump:
+        # use the old fastq-dump utility
+        fastq_dump_cmd_template = Template('$fastq_dump_bin/fastq-dump -I --skip-technical --split-files --read-filter pass -outdir $out_dir $id')
+    else:
+        # use the new fasterq-dump utility (faster, but doesn't have filtering option which results in bigger files)
+        fastq_dump_cmd_template = Template('$fastq_dump_bin/fasterq-dump --outdir $out_dir --split-files -f $id')
 
+    # for each run, download the fastq file
     for run_id in run_ids:
-        fasterq_dump_cmd = fasterq_dump_cmd_template.substitute(fasterq_dump_bin=fasterq_dump_loc, id=run_id, out_dir=output_dir)
+        fastq_dump_cmd = fastq_dump_cmd_template.substitute(fastq_dump_bin=fastq_dump_loc, id=run_id, out_dir=output_dir)
 
-        # call fasterq-dump
+        # call fastq-dump
         try:
-            print 'executing \'' + fasterq_dump_cmd + '\''
-            result = subprocess.check_output([fasterq_dump_cmd], shell=True)
+            print 'executing \'' + fastq_dump_cmd + '\''
+            result = subprocess.check_output([fastq_dump_cmd], shell=True)
         except subprocess.CalledProcessError as e:
             return_code = e.returncode
 
@@ -103,7 +109,7 @@ def download_fastq_files(fasterq_dump_loc, output_dir, run_ids, gzip_output=True
 
     return
 
-def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly, compress_files):
+def download_sra_data(fastq_dump_loc, fastq_output_dir, accession_id, metaonly, compress_files, filter_reads):
 
     # ===== 1. Get the metadata for each run
     metadata = get_accession_metadata(accession_id)
@@ -112,7 +118,7 @@ def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly
 
     # ===== 2. Get the fastq files for each run
     if not metaonly:
-        download_fastq_files(fasterq_dump_loc, fastq_output_dir, get_run_ids(metadata), gzip_output=compress_files)
+        download_fastq_files(fastq_dump_loc, fastq_output_dir, get_run_ids(metadata), gzip_output=compress_files, use_fastq_dump=filter_reads)
         print 'Fastq Filenames:'
         print(glob.glob(fastq_output_dir+'/*.fastq*'))
 
@@ -120,24 +126,25 @@ def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly
 
 
     # ===== 4. Add everything to the workspace (?)
-    
+
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='A script to gather SRA data for a given accession id.',
-                usage='usage: ./p3_sra.py -bin <path to fasterq-dump> -out <fastq output directory> -id <SRA accession id (SRX, SRP, SRR)>')
+                usage='usage: ./p3_sra.py -bin <path to fastq-dump> -out <fastq output directory> -id <SRA accession id (SRX, SRP, SRR)>')
 
-    parser.add_argument('-bin', required=True, help='Path to the fasterq-dump binary')
+    parser.add_argument('-tooldir', required=True, help='Path to the fastq-dump binary')
     parser.add_argument('-out', required=True, help='Temporary output directory for fastq files')
     parser.add_argument('-id', required=True, help='SRA accession id (SRX, SRP, SRR)')
     parser.add_argument('--metaonly', action='store_true', help='Skip the download of the fastq files')
     parser.add_argument('--gzip', action='store_true', help='Compress the fastq files after download')
+    parser.add_argument('--filter', action='store_true', help='Use fastq-dump instead of fasterq-dump to leverage the read filter')
 
     args = parser.parse_args()
 
     accession_id = args.id
     acceptable_prefixes = ('SRX', 'SRP', 'SRR', 'DRX', 'DRP', 'DRR')
     if accession_id.startswith(acceptable_prefixes):
-        download_sra_data(args.bin, args.out, accession_id, args.metaonly, args.gzip)
+        download_sra_data(args.tooldir, args.out, accession_id, args.metaonly, args.gzip, args.filter)
     else:
         sys.exit('Accession ID must start with: ' + ', '.join(acceptable_prefixes))
