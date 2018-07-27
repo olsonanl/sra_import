@@ -8,6 +8,7 @@ import json
 from collections import OrderedDict
 import StringIO
 from lxml import etree
+import sys
 
 def get_accession_metadata(accession_id):
 
@@ -81,39 +82,45 @@ def get_run_ids(run_meta):
         run_ids.append(run['run_id'])
     return run_ids
 
-def download_fastq_files(fasterq_dump_loc, output_dir, run_ids):
+def download_fastq_files(fasterq_dump_loc, output_dir, run_ids, gzip_output=True):
 
-    fasterq_dump_cmd_template = Template('$fasterq_dump_bin --outdir $out_dir --split-files -f $id')
+    fasterq_dump_cmd_template = Template('$fasterq_dump_bin --outdir $out_dir --split-files -f $id | gzip')
 
     for run_id in run_ids:
         fasterq_dump_cmd = fasterq_dump_cmd_template.substitute(fasterq_dump_bin=fasterq_dump_loc, id=run_id, out_dir=output_dir)
 
         # call fasterq-dump
         try:
-            print 'executing ' + fasterq_dump_cmd
+            print 'executing \'' + fasterq_dump_cmd + '\''
             result = subprocess.check_output([fasterq_dump_cmd], shell=True)
         except subprocess.CalledProcessError as e:
             return_code = e.returncode
 
+        # gzip the output; gzip will skip anything already zipped
+        if gzip_output:
+            gzip_cmd = 'gzip '+output_dir+'/*.fastq'
+            subprocess.call(gzip_cmd, shell=True)
+
     return
 
-def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly):
+def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly, compress_files):
 
     # ===== 1. Get the metadata for each run
     metadata = get_accession_metadata(accession_id)
     print 'Metadata:'
     print json.dumps(metadata, indent=1)
 
-    # ===== 2. Pack it into the output JSON
-
-
-    # ===== 3. Get the fastq files for each run
+    # ===== 2. Get the fastq files for each run
     if not metaonly:
-        download_fastq_files(fasterq_dump_loc, fastq_output_dir, get_run_ids(metadata))
+        download_fastq_files(fasterq_dump_loc, fastq_output_dir, get_run_ids(metadata), gzip_output=compress_files)
         print 'Fastq Filenames:'
-        print(glob.glob(fastq_output_dir+'/*.fastq'))
+        print(glob.glob(fastq_output_dir+'/*.fastq*'))
+
+    # ===== 3. Pack it into the output JSON
+
 
     # ===== 4. Add everything to the workspace (?)
+    
 
 if __name__ == '__main__':
 
@@ -124,14 +131,13 @@ if __name__ == '__main__':
     parser.add_argument('-out', required=True, help='Temporary output directory for fastq files')
     parser.add_argument('-id', required=True, help='SRA accession id (SRX, SRP, SRR)')
     parser.add_argument('--metaonly', action='store_true', help='Skip the download of the fastq files')
+    parser.add_argument('--gzip', action='store_true', help='Compress the fastq files after download')
 
     args = parser.parse_args()
 
     accession_id = args.id
-    if accession_id.startswith(('SRX', 'SRP', 'SRR', 'DRX', 'DRP', 'DRR')):
-        download_sra_data(args.bin, args.out, accession_id, args.metaonly)
-
-        # curl -s 'https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=docset&term=DRP003075'
-        # from xml.etree import cElementTree as ElementTree
-        # root = ElementTree.fromstring(result)
-        #
+    acceptable_prefixes = ('SRX', 'SRP', 'SRR', 'DRX', 'DRP', 'DRR')
+    if accession_id.startswith(acceptable_prefixes):
+        download_sra_data(args.bin, args.out, accession_id, args.metaonly, args.gzip)
+    else:
+        sys.exit('Accession ID must start with: ' + ', '.join(acceptable_prefixes))
