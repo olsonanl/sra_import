@@ -136,12 +136,16 @@ def download_fastq_files(fasterq_dump_loc, output_dir, run_ids, gzip_output=True
 
     return
 
-def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly, compress_files):
+def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly, compress_files, metadata_file):
 
     # ===== 1. Get the metadata for each run
     metadata = get_accession_metadata(accession_id)
     print 'Metadata:'
     print json.dumps(metadata, indent=1)
+    if metadata_file:
+        fp = file(metadata_file, "w")
+        json.dump(metadata, fp, indent=2)
+        fp.close()
 
     # ===== 2. Get the fastq files for each run
     if not metaonly:
@@ -161,16 +165,20 @@ if __name__ == '__main__':
                 usage='usage: ./p3_sra.py -bin <path to fasterq-dump> -out <fastq output directory> -id <SRA accession id (SRX, SRP, SRR)>')
 
     parser.add_argument('--bin', required=False, help='Path to the fasterq-dump binary', default="fasterq-dump")
-    parser.add_argument('--out', required=True, help='Temporary output directory for fastq files')
+    parser.add_argument('--out', required=False, help='Temporary output directory for fastq files')
     parser.add_argument('--id', required=True, help='SRA accession id (SRX, SRP, SRR)')
     parser.add_argument('--metaonly', action='store_true', help='Skip the download of the fastq files')
+    parser.add_argument('--metadata-file', help='Store the metadata in the given file')
     parser.add_argument('--gzip', action='store_true', help='Compress the fastq files after download')
 
     args = parser.parse_args()
 
+    if not args.metaonly and not args.out:
+        sys.exit("Output directory must be specified")
+
     accession_id = args.id
     acceptable_prefixes = ('SRX', 'SRP', 'SRR', 'DRX', 'DRP', 'DRR')
     if accession_id.startswith(acceptable_prefixes):
-        download_sra_data(args.bin, args.out, accession_id, args.metaonly, args.gzip)
+        download_sra_data(args.bin, args.out, accession_id, args.metaonly, args.gzip, args.metadata_file)
     else:
         sys.exit('Accession ID must start with: ' + ', '.join(acceptable_prefixes))
