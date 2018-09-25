@@ -151,9 +151,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='A script to gather SRA data for a given accession id.',
                 usage='usage: ./p3_sra.py -bin <path to fasterq-dump> -out <fastq output directory> -id <SRA accession id (SRX, SRP, SRR)>')
 
-    parser.add_argument('-bin', required=True, help='Path to the fasterq-dump binary')
-    parser.add_argument('-out', required=True, help='Temporary output directory for fastq files')
-    parser.add_argument('-id', required=True, help='SRA accession id (SRX, SRP, SRR)')
+    parser.add_argument('--bin', required=False, help='Path to the fasterq-dump binary', default="fasterq-dump")
+    parser.add_argument('--out', required=True, help='Temporary output directory for fastq files')
+    parser.add_argument('--id', required=True, help='SRA accession id (SRX, SRP, SRR)')
     parser.add_argument('--metaonly', action='store_true', help='Skip the download of the fastq files')
     parser.add_argument('--gzip', action='store_true', help='Compress the fastq files after download')
 
