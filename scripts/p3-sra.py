@@ -60,7 +60,15 @@ def get_accession_metadata(accession_id):
         for db in experiment_package.xpath('STUDY//XREF_LINK/DB/text()'):
             exp['study_'+db+'_ids'] = experiment_package.xpath('STUDY//XREF_LINK/ID/text()')
 
-        exp['run_ids'] = safe_read(experiment_package, 'RUN_SET/RUN/@accession')
+        exp['runs'] = []
+        for run in experiment_package.xpath('RUN_SET/RUN'):
+            rdata = {}
+            rdata['accession'] = safe_read(run, '@accession')[0]
+            rdata['total_bases'] = safe_read(run, '@total_bases')[0]
+            rdata['size'] = safe_read(run, '@size')[0]
+            print(rdata)
+            exp['runs'].append(rdata)
+
         exp['library_name'] = safe_read(experiment_package, 'EXPERIMENT//LIBRARY_NAME/text()', index=0)
         exp['library_strategy'] = safe_read(experiment_package, 'EXPERIMENT//LIBRARY_STRATEGY/text()', index=0)
 
@@ -88,11 +96,12 @@ def get_accession_metadata(accession_id):
 
     # for each run id in each experiment, create a new record
     for exp in exp_meta:
-        for run_id in exp['run_ids']:
+        for rdata in exp['runs']:
             run = {}
-            run['run_id'] = run_id
+            for k in rdata:
+                run[k] = rdata[k]
             for k in exp:
-                if k != 'run_ids':
+                if k != 'runs':
                     run[k] = exp[k]
             run_meta.append(run)
 
