@@ -9,6 +9,8 @@ from collections import OrderedDict
 import StringIO
 from lxml import etree
 import sys
+import shutil
+import urllib2
 
 def safe_read(element, xpath, index=None, xpath_fallback=None):
 
@@ -106,6 +108,35 @@ def get_accession_metadata(accession_id):
             run_meta.append(run)
 
     return run_meta
+
+def get_runinfo(run_accession):
+    """ take sra run accession (like SRR123456)
+    return dictionary with keys like: spots,bases,spots_with_mates,avgLength,size_MB,AssemblyName,download_path.....
+    """
+    runinfo_url = "https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=runinfo&term="+run_accession
+    r = urllib2.urlopen(runinfo_url)
+    lines = r.read().split("\n")
+    keys   = lines[0].split(",")
+    values = lines[1].split(",")
+    runinfo = dict(zip(keys, values))
+    return runinfo
+
+def ftp_download_single_run(run_accession):
+    """ use ftp to download one sra file 
+    one advantage of this is that it does not leave large file in $HOME/ncbi/public/sra/
+    """
+    sra_file_url = "ftp://ftp-trace.ncbi.nih.gov/sra/sra-instant/reads/ByRun/sra/%s/%s/%s/%s.sra"%(run_accession[:3], run_accession[:6], run_accession, run_accession)
+    with open(run_accession+".sra", 'wb') as OUT:
+        response = urllib2.urlopen(sra_file_url)
+        shutil.copyfileobj(response, OUT)
+
+def fastqDumpExistingSraFile(file_name, splitFiles = False):
+    """ assumes fastq-dump is on path """
+    command = ["fastq-dump"]
+    if splitFiles:
+        command.append("--split-files")
+    command.append(file_name)
+    subprocess.call(command, shell=False)
 
 def get_run_ids(run_meta):
     run_ids = []
