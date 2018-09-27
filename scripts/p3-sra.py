@@ -22,7 +22,7 @@ if __name__ == '__main__':
         sys.exit("Output directory must be specified")
 
     accession_id = args.id
-    acceptable_prefixes = ('SRX', 'SRP', 'SRR', 'DRX', 'DRP', 'DRR')
+    acceptable_prefixes = ('SRX', 'SRP', 'SRR', 'DRX', 'DRP', 'DRR', 'ERR')
     if accession_id.startswith(acceptable_prefixes):
         download_sra_data(args.bin, args.out, accession_id, args.metaonly, args.gzip, args.metadata_file)
     else:
