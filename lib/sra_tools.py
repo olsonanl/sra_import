@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-import argparse
 from string import Template
 import subprocess
 import csv
@@ -9,6 +7,9 @@ from collections import OrderedDict
 import StringIO
 from lxml import etree
 import sys
+
+import shutil
+import urllib2
 
 def safe_read(element, xpath, index=None, xpath_fallback=None):
 
@@ -60,7 +61,16 @@ def get_accession_metadata(accession_id):
         for db in experiment_package.xpath('STUDY//XREF_LINK/DB/text()'):
             exp['study_'+db+'_ids'] = experiment_package.xpath('STUDY//XREF_LINK/ID/text()')
 
-        exp['run_ids'] = safe_read(experiment_package, 'RUN_SET/RUN/@accession')
+        exp['runs'] = []
+        for run in experiment_package.xpath('RUN_SET/RUN'):
+            rdata = {}
+            rdata['run_id'] = safe_read(run, '@accession')[0]
+	    rdata['accession'] = rdata['run_id']
+            rdata['total_bases'] = safe_read(run, '@total_bases')[0]
+            rdata['size'] = safe_read(run, '@size')[0]
+            print(rdata)
+            exp['runs'].append(rdata)
+
         exp['library_name'] = safe_read(experiment_package, 'EXPERIMENT//LIBRARY_NAME/text()', index=0)
         exp['library_strategy'] = safe_read(experiment_package, 'EXPERIMENT//LIBRARY_STRATEGY/text()', index=0)
 
@@ -88,15 +98,45 @@ def get_accession_metadata(accession_id):
 
     # for each run id in each experiment, create a new record
     for exp in exp_meta:
-        for run_id in exp['run_ids']:
+        for rdata in exp['runs']:
             run = {}
-            run['run_id'] = run_id
+            for k in rdata:
+                run[k] = rdata[k]
             for k in exp:
-                if k != 'run_ids':
+                if k != 'runs':
                     run[k] = exp[k]
             run_meta.append(run)
 
     return run_meta
+
+def get_runinfo(run_accession):
+    """ take sra run accession (like SRR123456)
+    return dictionary with keys like: spots,bases,spots_with_mates,avgLength,size_MB,AssemblyName,download_path.....
+    """
+    runinfo_url = "https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=runinfo&term="+run_accession
+    r = urllib2.urlopen(runinfo_url)
+    lines = r.read().split("\n")
+    keys   = lines[0].split(",")
+    values = lines[1].split(",")
+    runinfo = dict(zip(keys, values))
+    return runinfo
+
+def ftp_download_single_run(run_accession):
+    """ use ftp to download one sra file 
+    one advantage of this is that it does not leave large file in $HOME/ncbi/public/sra/
+    """
+    sra_file_url = "ftp://ftp-trace.ncbi.nih.gov/sra/sra-instant/reads/ByRun/sra/%s/%s/%s/%s.sra"%(run_accession[:3], run_accession[:6], run_accession, run_accession)
+    with open(run_accession+".sra", 'wb') as OUT:
+        response = urllib2.urlopen(sra_file_url)
+        shutil.copyfileobj(response, OUT)
+
+def fastqDumpExistingSraFile(file_name, splitFiles = False):
+    """ assumes fastq-dump is on path """
+    command = ["fastq-dump"]
+    if splitFiles:
+        command.append("--split-files")
+    command.append(file_name)
+    subprocess.call(command, shell=False)
 
 def get_run_ids(run_meta):
     run_ids = []
@@ -107,7 +147,7 @@ def get_run_ids(run_meta):
 def download_fastq_files(fasterq_dump_loc, output_dir, run_ids, gzip_output=True):
 
     # use the new fasterq-dump utility (faster, but doesn't have filtering option which results in bigger files)
-    fasterq_dump_cmd_template = Template('$fasterq_dump_bin --outdir $out_dir --split-files -f $id | gzip')
+    fasterq_dump_cmd_template = Template('$fasterq_dump_bin --outdir $out_dir --split-files -f $id')
 
     # for each run, download the fastq file
     for run_id in run_ids:
@@ -127,12 +167,16 @@ def download_fastq_files(fasterq_dump_loc, output_dir, run_ids, gzip_output=True
 
     return
 
-def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly, compress_files):
+def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly, compress_files, metadata_file):
 
     # ===== 1. Get the metadata for each run
     metadata = get_accession_metadata(accession_id)
     print 'Metadata:'
     print json.dumps(metadata, indent=1)
+    if metadata_file:
+        fp = file(metadata_file, "w")
+        json.dump(metadata, fp, indent=2)
+        fp.close()
 
     # ===== 2. Get the fastq files for each run
     if not metaonly:
@@ -144,24 +188,3 @@ def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly
 
 
     # ===== 4. Add everything to the workspace (?)
-
-
-if __name__ == '__main__':
-
-    parser = argparse.ArgumentParser(description='A script to gather SRA data for a given accession id.',
-                usage='usage: ./p3_sra.py -bin <path to fasterq-dump> -out <fastq output directory> -id <SRA accession id (SRX, SRP, SRR)>')
-
-    parser.add_argument('-bin', required=True, help='Path to the fasterq-dump binary')
-    parser.add_argument('-out', required=True, help='Temporary output directory for fastq files')
-    parser.add_argument('-id', required=True, help='SRA accession id (SRX, SRP, SRR)')
-    parser.add_argument('--metaonly', action='store_true', help='Skip the download of the fastq files')
-    parser.add_argument('--gzip', action='store_true', help='Compress the fastq files after download')
-
-    args = parser.parse_args()
-
-    accession_id = args.id
-    acceptable_prefixes = ('SRX', 'SRP', 'SRR', 'DRX', 'DRP', 'DRR')
-    if accession_id.startswith(acceptable_prefixes):
-        download_sra_data(args.bin, args.out, accession_id, args.metaonly, args.gzip)
-    else:
-        sys.exit('Accession ID must start with: ' + ', '.join(acceptable_prefixes))
