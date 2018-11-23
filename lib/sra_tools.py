@@ -3,6 +3,7 @@ import subprocess
 import csv
 import glob
 import json
+import os
 from collections import OrderedDict
 import StringIO
 from lxml import etree
@@ -65,7 +66,7 @@ def get_accession_metadata(accession_id):
         for run in experiment_package.xpath('RUN_SET/RUN'):
             rdata = {}
             rdata['run_id'] = safe_read(run, '@accession')[0]
-	    rdata['accession'] = rdata['run_id']
+            rdata['accession'] = rdata['run_id']
             rdata['total_bases'] = safe_read(run, '@total_bases')[0]
             rdata['size'] = safe_read(run, '@size')[0]
             print(rdata)
@@ -73,6 +74,8 @@ def get_accession_metadata(accession_id):
 
         exp['library_name'] = safe_read(experiment_package, 'EXPERIMENT//LIBRARY_NAME/text()', index=0)
         exp['library_strategy'] = safe_read(experiment_package, 'EXPERIMENT//LIBRARY_STRATEGY/text()', index=0)
+        #this might be unreliable. use the existence of paired file
+        exp['library_layout'] = "PAIRED" if safe_read(experiment_package, 'EXPERIMENT//LIBRARY_LAYOUT/PAIRED', index=0) != "" else "SINGLE" 
 
         # just assume one sample
         sample = safe_read(experiment_package, 'SAMPLE', index=0)
@@ -171,20 +174,24 @@ def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly
 
     # ===== 1. Get the metadata for each run
     metadata = get_accession_metadata(accession_id)
-    print 'Metadata:'
-    print json.dumps(metadata, indent=1)
-    if metadata_file:
-        fp = file(metadata_file, "w")
-        json.dump(metadata, fp, indent=2)
-        fp.close()
 
     # ===== 2. Get the fastq files for each run
     if not metaonly:
         download_fastq_files(fasterq_dump_loc, fastq_output_dir, get_run_ids(metadata), gzip_output=compress_files)
         print 'Fastq Filenames:'
         print(glob.glob(fastq_output_dir+'/*.fastq*'))
+        for run in metadata:
+            run_id = run.get("run_id",None)
+            files = glob.glob(os.path.join(fastq_output_dir,"*"+run_id+"*"))
+            run['files']=[os.path.basename(f) for f in files]
 
     # ===== 3. Pack it into the output JSON
+    print 'Metadata:'
+    print json.dumps(metadata, indent=1)
+    if metadata_file:
+        fp = file(metadata_file, "w")
+        json.dump(metadata, fp, indent=2)
+        fp.close()
 
 
     # ===== 4. Add everything to the workspace (?)
