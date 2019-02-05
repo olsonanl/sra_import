@@ -64,6 +64,14 @@ def get_accession_metadata(accession_id):
     for experiment_package in tree.xpath('//EXPERIMENT_PACKAGE'):
         exp = {}
         exp['exp_id'] = safe_read(experiment_package, 'EXPERIMENT/@accession', index=0)
+
+        plat = safe_read(experiment_package, 'EXPERIMENT/PLATFORM/*[1]', index=0)
+        if plat != '':
+            exp['platform_name'] = plat.tag
+            exp['instrument_model'] = safe_read(plat, 'INSTRUMENT_MODEL/text()')
+            if isinstance(exp['instrument_model'], list):
+                exp['instrument_model'] = exp['instrument_model'][0]
+
         exp['study_id'] = safe_read(experiment_package, 'EXPERIMENT/STUDY_REF/@accession', index=0)
 
         for db in experiment_package.xpath('STUDY//XREF_LINK/DB/text()'):
@@ -154,15 +162,23 @@ def get_run_ids(run_meta):
         run_ids.append(run['run_id'])
     return run_ids
 
-def download_fastq_files(fasterq_dump_loc, output_dir, run_ids, gzip_output=True):
+def download_fastq_files(fasterq_dump_loc, output_dir, metadata, gzip_output=True):
 
 
     # for each run, download the fastq file
-    for run_id in run_ids:
-        # use the new fasterq-dump utility (faster, but doesn't have filtering option which results in bigger files)
-        fasterq_dump_cmd = [fasterq_dump_loc, '--outdir', output_dir,  '--split-files', '-f', run_id]
+    for item in metadata:
+        run_id = item['run_id']
 
-        # call fasterq-dump
+        #
+        # If not a pacbio run,  use the new fasterq-dump utility (faster, but doesn't have
+        # filtering option which results in bigger files)
+        # Pacbio requires fastq-dump
+        #
+        if item['platform_name'] == 'PACBIO_SMRT':
+            fasterq_dump_cmd = ['fastq-dump', '--outdir', output_dir,  '--split-files', run_id]
+        else:
+            fasterq_dump_cmd = [fasterq_dump_loc, '--outdir', output_dir,  '--split-files', '-f', run_id]
+
         try:
             print 'executing \'' + str(fasterq_dump_cmd) + '\''
             result = subprocess.check_output(fasterq_dump_cmd)
@@ -186,7 +202,8 @@ def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly
 
     # ===== 2. Get the fastq files for each run
     if not metaonly:
-        download_fastq_files(fasterq_dump_loc, fastq_output_dir, get_run_ids(metadata), gzip_output=compress_files)
+
+        download_fastq_files(fasterq_dump_loc, fastq_output_dir, metadata, gzip_output=compress_files)
         print 'Fastq Filenames:'
         print(glob.glob(fastq_output_dir+'/*.fastq*'))
         for run in metadata:
