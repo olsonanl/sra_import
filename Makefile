@@ -12,6 +12,6 @@ bin: $(BIN_PYTHON)
 
 deploy: deploy-client 
 deploy-all: deploy-client 
-deploy-client: deploy-scripts 
+deploy-client: deploy-scripts deploy-libs
 
 include $(TOP_DIR)/tools/Makefile.common.rules

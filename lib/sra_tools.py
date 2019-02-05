@@ -1,13 +1,15 @@
-from string import Template
 import subprocess
 import csv
 import glob
 import json
 import os
+import time
+import random
 from collections import OrderedDict
 import StringIO
 from lxml import etree
 import sys
+import requests
 
 import shutil
 import urllib2
@@ -35,18 +37,23 @@ def safe_read(element, xpath, index=None, xpath_fallback=None):
 
 def get_accession_metadata(accession_id):
 
-    get_cmd_template = Template('curl -s \'https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=docset&term=$id\'')
-    get_cmd = get_cmd_template.substitute(id=accession_id)
+    params = { 'save': 'efetch', 'db': 'sra', 'rettype': 'docset', 'term': accession_id }
+    retry_count = 0
+    while True:
+        ret = requests.get('https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi', params=params)
+        if ret.status_code == 429:
+            delay = retry_count + random.uniform(0, 2)
+            print >> sys.stderr,  "Delaying for 429 error " + str(delay)
+            time.sleep(delay)
+            retry_count = retry_count + 1
+        elif ret.status_code != 200:
+            return_code = ret.status_code
+            break
+        else:
+            break
 
-    # call the api
-    try:
-        result = subprocess.check_output([get_cmd], shell=True)
-    except subprocess.CalledProcessError as e:
-        return_code = e.returncode
-
-    # parse the XML results
     parser = etree.XMLParser(remove_blank_text=True)
-    result_obj = StringIO.StringIO(result)
+    result_obj = StringIO.StringIO(ret.text)
     tree = etree.parse(result_obj, parser)
 
     # print it out just for fun
@@ -57,6 +64,14 @@ def get_accession_metadata(accession_id):
     for experiment_package in tree.xpath('//EXPERIMENT_PACKAGE'):
         exp = {}
         exp['exp_id'] = safe_read(experiment_package, 'EXPERIMENT/@accession', index=0)
+
+        plat = safe_read(experiment_package, 'EXPERIMENT/PLATFORM/*[1]', index=0)
+        if plat != '':
+            exp['platform_name'] = plat.tag
+            exp['instrument_model'] = safe_read(plat, 'INSTRUMENT_MODEL/text()')
+            if isinstance(exp['instrument_model'], list):
+                exp['instrument_model'] = exp['instrument_model'][0]
+
         exp['study_id'] = safe_read(experiment_package, 'EXPERIMENT/STUDY_REF/@accession', index=0)
 
         for db in experiment_package.xpath('STUDY//XREF_LINK/DB/text()'):
@@ -147,26 +162,36 @@ def get_run_ids(run_meta):
         run_ids.append(run['run_id'])
     return run_ids
 
-def download_fastq_files(fasterq_dump_loc, output_dir, run_ids, gzip_output=True):
+def download_fastq_files(fasterq_dump_loc, output_dir, metadata, gzip_output=True):
 
-    # use the new fasterq-dump utility (faster, but doesn't have filtering option which results in bigger files)
-    fasterq_dump_cmd_template = Template('$fasterq_dump_bin --outdir $out_dir --split-files -f $id')
 
     # for each run, download the fastq file
-    for run_id in run_ids:
-        fasterq_dump_cmd = fasterq_dump_cmd_template.substitute(fasterq_dump_bin=fasterq_dump_loc, id=run_id, out_dir=output_dir)
+    for item in metadata:
+        run_id = item['run_id']
 
-        # call fasterq-dump
+        #
+        # If not a pacbio run,  use the new fasterq-dump utility (faster, but doesn't have
+        # filtering option which results in bigger files)
+        # Pacbio requires fastq-dump
+        #
+        if item['platform_name'] == 'PACBIO_SMRT':
+            fasterq_dump_cmd = ['fastq-dump', '--outdir', output_dir,  '--split-files', run_id]
+        else:
+            fasterq_dump_cmd = [fasterq_dump_loc, '--outdir', output_dir,  '--split-files', '-f', run_id]
+
         try:
-            print 'executing \'' + fasterq_dump_cmd + '\''
-            result = subprocess.check_output([fasterq_dump_cmd], shell=True)
+            print 'executing \'' + str(fasterq_dump_cmd) + '\''
+            result = subprocess.check_output(fasterq_dump_cmd)
         except subprocess.CalledProcessError as e:
             return_code = e.returncode
 
         # gzip the output; gzip will skip anything already zipped
         if gzip_output:
-            gzip_cmd = 'gzip '+output_dir+'/*.fastq'
-            subprocess.call(gzip_cmd, shell=True)
+            fq_files = glob.glob(output_dir + "/*.fastq")
+            if fq_files.count > 0:
+                gzip_cmd = ["gzip"] + fq_files;
+                # print "gzip: " + str(gzip_cmd)
+                subprocess.call(gzip_cmd)
 
     return
 
@@ -177,7 +202,8 @@ def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly
 
     # ===== 2. Get the fastq files for each run
     if not metaonly:
-        download_fastq_files(fasterq_dump_loc, fastq_output_dir, get_run_ids(metadata), gzip_output=compress_files)
+
+        download_fastq_files(fasterq_dump_loc, fastq_output_dir, metadata, gzip_output=compress_files)
         print 'Fastq Filenames:'
         print(glob.glob(fastq_output_dir+'/*.fastq*'))
         for run in metadata:
