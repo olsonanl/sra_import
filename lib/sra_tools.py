@@ -35,7 +35,7 @@ def safe_read(element, xpath, index=None, xpath_fallback=None):
         return ''
 
 
-def get_accession_metadata(accession_id):
+def get_accession_metadata(accession_id, sra_metadata_file):
 
     params = { 'save': 'efetch', 'db': 'sra', 'rettype': 'docset', 'term': accession_id }
     retry_count = 0
@@ -57,7 +57,11 @@ def get_accession_metadata(accession_id):
     tree = etree.parse(result_obj, parser)
 
     # print it out just for fun
-    #print(etree.tostring(tree, pretty_print=True))
+    if sra_metadata_file:
+        fp = file(sra_metadata_file, "w")
+        print >> fp, etree.tostring(tree, pretty_print=True)
+        fp.close()
+    
 
     # step through the experiments
     exp_meta = []
@@ -77,20 +81,73 @@ def get_accession_metadata(accession_id):
         for db in experiment_package.xpath('STUDY//XREF_LINK/DB/text()'):
             exp['study_'+db+'_ids'] = experiment_package.xpath('STUDY//XREF_LINK/ID/text()')
 
+        exp['library_name'] = safe_read(experiment_package, 'EXPERIMENT//LIBRARY_NAME/text()', index=0)
+        exp['library_strategy'] = safe_read(experiment_package, 'EXPERIMENT//LIBRARY_STRATEGY/text()', index=0)
+        #this might be unreliable. use the existence of paired file
+        exp['library_layout'] = "PAIRED" if safe_read(experiment_package, 'EXPERIMENT//LIBRARY_LAYOUT/PAIRED', index=0) != "" else "SINGLE" 
+
         exp['runs'] = []
         for run in experiment_package.xpath('RUN_SET/RUN'):
             rdata = {}
             rdata['run_id'] = safe_read(run, '@accession')[0]
             rdata['accession'] = rdata['run_id']
-            rdata['total_bases'] = safe_read(run, '@total_bases')[0]
-            rdata['size'] = safe_read(run, '@size')[0]
+            rdata['total_bases'] = int(safe_read(run, '@total_bases')[0])
+            rdata['total_spots'] = int(safe_read(run, '@total_spots')[0])
+            rdata['size'] = int(safe_read(run, '@size')[0])
+            #
+            # Try to pull the read length
+            #
+            for rattr in run.xpath("RUN_ATTRIBUTES/*"):
+                tag = rattr.findtext("TAG")
+                if tag == "actual_read_length":
+                    rdata['read_length'] = int(rattr.findtext("VALUE"))
+                elif tag == "run":
+                    rdata['run_attribute'] = rattr.findtext("VALUE")
+            stats = run.xpath("Statistics")
+            if stats:
+                stats = stats[0]
+                sattrib = stats.attrib
+                nreads = sattrib['nreads']
+
+                if nreads.isdigit():
+                    rdata['n_reads'] = int(nreads)
+                for read in stats:
+                    rattr = read.attrib
+                    if rattr.has_key('average') and not rdata.has_key('read_length'):
+                        rdata['read_length'] = float(rattr['average'])
+            
+
+            #
+            # Calculate estimated disk size based on our data above.
+            #
+            # Validate first that total_spots * read_size * read_count = total_bases
+            #
+            if not rdata.has_key('n_reads'):
+                if exp['library_layout'] == 'PAIRED':
+                    rdata['n_reads'] = 2
+                else:
+                    rdata['n_reads'] = 1
+
+            if rdata.has_key('read_length'):
+                calc_bases = rdata['read_length'] * rdata['n_reads'] * rdata['total_spots']
+                err = abs(calc_bases - rdata['total_bases']) / rdata['total_bases']
+                print "calc=%d val=%d %f" % (calc_bases, rdata['total_bases'], err)
+                
+                if err > 0.1:
+                    print "Bad size calculation"
+                else:
+                    if rdata.has_key('run_id'):
+                        hlen = len(rdata['run_id']) + 50
+                    else:
+                        hlen = 40
+                        # header is 40 ish unless run_id is set; data size is read_length. Two header/data pairs per read,
+                        # total_spots of those per file, n_reads files.
+                        rdata['estimated_size'] = (hlen + rdata['read_length']) * 2 * rdata['n_reads'] * rdata['total_spots']
+                        
+
             print(rdata)
             exp['runs'].append(rdata)
 
-        exp['library_name'] = safe_read(experiment_package, 'EXPERIMENT//LIBRARY_NAME/text()', index=0)
-        exp['library_strategy'] = safe_read(experiment_package, 'EXPERIMENT//LIBRARY_STRATEGY/text()', index=0)
-        #this might be unreliable. use the existence of paired file
-        exp['library_layout'] = "PAIRED" if safe_read(experiment_package, 'EXPERIMENT//LIBRARY_LAYOUT/PAIRED', index=0) != "" else "SINGLE" 
 
         # just assume one sample
         sample = safe_read(experiment_package, 'SAMPLE', index=0)
@@ -195,10 +252,10 @@ def download_fastq_files(fasterq_dump_loc, output_dir, metadata, gzip_output=Tru
 
     return
 
-def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly, compress_files, metadata_file):
+def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly, compress_files, metadata_file, sra_metadata_file):
 
     # ===== 1. Get the metadata for each run
-    metadata = get_accession_metadata(accession_id)
+    metadata = get_accession_metadata(accession_id, sra_metadata_file)
 
     # ===== 2. Get the fastq files for each run
     if not metaonly:
