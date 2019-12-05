@@ -221,6 +221,21 @@ def get_run_ids(run_meta):
 
 def download_fastq_files(fasterq_dump_loc, output_dir, metadata, gzip_output=True):
 
+    #
+    # determine the list of ids to download
+    #
+    run_ids = [item['run_id'] for item in metadata]
+
+    #
+    # Prefetch ids.
+    #
+
+    cmd = ['prefetch'] + run_ids
+    try:
+        result = retry_subprocess_check_output(cmd, 10, 60);
+
+    except subprocess.CalledProcessError as e:
+        print >> sys.stderr,  "Prefetch failed with code " + str(e.returncode)
 
     # for each run, download the fastq file
     for item in metadata:
@@ -229,18 +244,21 @@ def download_fastq_files(fasterq_dump_loc, output_dir, metadata, gzip_output=Tru
         #
         # If not a pacbio run,  use the new fasterq-dump utility (faster, but doesn't have
         # filtering option which results in bigger files)
-        # Pacbio requires fastq-dump
+        #
+        # Pacbio requires fastq-dump, and we do not split files for it.
         #
         if item['platform_name'] == 'PACBIO_SMRT':
-            fasterq_dump_cmd = ['fastq-dump', '--outdir', output_dir,  '--split-files', run_id]
+            fasterq_dump_cmd = ['fastq-dump', '--outdir', output_dir,  run_id]
         else:
             fasterq_dump_cmd = [fasterq_dump_loc, '--outdir', output_dir,  '--split-files', '-f', run_id]
 
         try:
             print 'executing \'' + str(fasterq_dump_cmd) + '\''
-            result = subprocess.check_output(fasterq_dump_cmd)
+            result = retry_subprocess_check_output(fasterq_dump_cmd, 5, 60)
+
         except subprocess.CalledProcessError as e:
-            return_code = e.returncode
+            print >> sys.stderr,  "Download failed with code " + str(e.returncode)
+            sys.exit(e.returncode)
 
         # gzip the output; gzip will skip anything already zipped
         if gzip_output:
@@ -278,3 +296,27 @@ def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly
 
 
     # ===== 4. Add everything to the workspace (?)
+
+def retry_subprocess_check_output(cmd, n_retries, retry_sleep):
+    attempt = 0
+    failed = False
+    last_error = None
+
+    while attempt < n_retries:
+        attempt += 1
+        if failed:
+            time.sleep(retry_sleep)
+
+        failed = False
+        try:
+            print >> sys.stderr, "Attempt %d of %d at running %s" % (attempt, n_retries, cmd)
+            return subprocess.check_output(cmd)
+
+        except subprocess.CalledProcessError as e:
+            print >> sys.stderr, "Attempt %d of %d failed at running %s: %s" % (attempt, n_retries, cmd, e)
+            last_error = e
+            failed = True
+
+    print >> sys.stderr, "Failed after %s retries running %s" % (attempt, cmd)
+    raise last_error
+
