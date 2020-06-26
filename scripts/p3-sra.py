@@ -14,6 +14,7 @@ if __name__ == '__main__':
     parser.add_argument('--id', required=True, help='SRA accession id (SRX, SRP, SRR)')
     parser.add_argument('--metaonly', action='store_true', help='Skip the download of the fastq files')
     parser.add_argument('--metadata-file', help='Store the metadata in the given file')
+    parser.add_argument('--sra-metadata-file', help='Store the original SRA metadata XML in the given file')
     parser.add_argument('--gzip', action='store_true', help='Compress the fastq files after download')
 
     args = parser.parse_args()
@@ -24,6 +25,6 @@ if __name__ == '__main__':
     accession_id = args.id
     acceptable_prefixes = ('SRX', 'SRP', 'SRR', 'DRX', 'DRP', 'DRR', 'ERR')
     if accession_id.startswith(acceptable_prefixes):
-        download_sra_data(args.bin, args.out, accession_id, args.metaonly, args.gzip, args.metadata_file)
+        download_sra_data(args.bin, args.out, accession_id, args.metaonly, args.gzip, args.metadata_file, args.sra_metadata_file)
     else:
         sys.exit('Accession ID must start with: ' + ', '.join(acceptable_prefixes))

@@ -35,7 +35,7 @@ def safe_read(element, xpath, index=None, xpath_fallback=None):
         return ''
 
 
-def get_accession_metadata(accession_id):
+def get_accession_metadata(accession_id, sra_metadata_file):
 
     params = { 'save': 'efetch', 'db': 'sra', 'rettype': 'docset', 'term': accession_id }
     retry_count = 0
@@ -57,7 +57,11 @@ def get_accession_metadata(accession_id):
     tree = etree.parse(result_obj, parser)
 
     # print it out just for fun
-    #print(etree.tostring(tree, pretty_print=True))
+    if sra_metadata_file:
+        fp = file(sra_metadata_file, "w")
+        print >> fp, etree.tostring(tree, pretty_print=True)
+        fp.close()
+    
 
     # step through the experiments
     exp_meta = []
@@ -77,20 +81,82 @@ def get_accession_metadata(accession_id):
         for db in experiment_package.xpath('STUDY//XREF_LINK/DB/text()'):
             exp['study_'+db+'_ids'] = experiment_package.xpath('STUDY//XREF_LINK/ID/text()')
 
+        exp['library_name'] = safe_read(experiment_package, 'EXPERIMENT//LIBRARY_NAME/text()', index=0)
+        exp['library_strategy'] = safe_read(experiment_package, 'EXPERIMENT//LIBRARY_STRATEGY/text()', index=0)
+        #this might be unreliable. use the existence of paired file
+        exp['library_layout'] = "PAIRED" if safe_read(experiment_package, 'EXPERIMENT//LIBRARY_LAYOUT/PAIRED', index=0) != "" else "SINGLE" 
+
         exp['runs'] = []
         for run in experiment_package.xpath('RUN_SET/RUN'):
             rdata = {}
             rdata['run_id'] = safe_read(run, '@accession')[0]
             rdata['accession'] = rdata['run_id']
-            rdata['total_bases'] = safe_read(run, '@total_bases')[0]
-            rdata['size'] = safe_read(run, '@size')[0]
+            try:
+                rdata['total_bases'] = int(safe_read(run, '@total_bases')[0])
+                rdata['total_spots'] = int(safe_read(run, '@total_spots')[0])
+                rdata['size'] = int(safe_read(run, '@size')[0])
+            except Exception as e:
+                print >> sys.stderr, "Data size not found"
+            #
+            # Try to pull the read length
+            #
+            for rattr in run.xpath("RUN_ATTRIBUTES/*"):
+                tag = rattr.findtext("TAG")
+                if tag == "actual_read_length":
+                    rdata['read_length'] = int(rattr.findtext("VALUE"))
+                elif tag == "run":
+                    rdata['run_attribute'] = rattr.findtext("VALUE")
+            stats = run.xpath("Statistics")
+            if stats:
+                stats = stats[0]
+                sattrib = stats.attrib
+
+                #
+                # nreads might lie. cf SRR6263255
+                #
+                nreads = 0
+                for read in stats:
+                    rattr = read.attrib
+                    print >> sys.stderr, rattr
+                    if rattr.has_key('count') and int(rattr['count']) > 0:
+                        nreads += 1
+                    if rattr.has_key('average') and not rdata.has_key('read_length'):
+                        rdata['read_length'] = float(rattr['average'])
+                if nreads > 0:
+                    rdata['n_reads'] = nreads
+            
+
+            #
+            # Calculate estimated disk size based on our data above.
+            #
+            # Validate first that total_spots * read_size * read_count = total_bases
+            #
+            if not rdata.has_key('n_reads'):
+                if exp['library_layout'] == 'PAIRED':
+                    rdata['n_reads'] = 2
+                else:
+                    rdata['n_reads'] = 1
+
+            if rdata.has_key('read_length'):
+                calc_bases = rdata['read_length'] * rdata['n_reads'] * rdata['total_spots']
+                err = abs(calc_bases - rdata['total_bases']) / rdata['total_bases']
+                print >> sys.stderr, "calc=%d val=%d %f" % (calc_bases, rdata['total_bases'], err)
+                
+                if err > 0.1:
+                    print >> sys.stderr, "Bad size calculation"
+                else:
+                    if rdata.has_key('run_id'):
+                        hlen = len(rdata['run_id']) + 50
+                    else:
+                        hlen = 40
+                        # header is 40 ish unless run_id is set; data size is read_length. Two header/data pairs per read,
+                        # total_spots of those per file, n_reads files.
+                        rdata['estimated_size'] = (hlen + rdata['read_length']) * 2 * rdata['n_reads'] * rdata['total_spots']
+                        
+
             print(rdata)
             exp['runs'].append(rdata)
 
-        exp['library_name'] = safe_read(experiment_package, 'EXPERIMENT//LIBRARY_NAME/text()', index=0)
-        exp['library_strategy'] = safe_read(experiment_package, 'EXPERIMENT//LIBRARY_STRATEGY/text()', index=0)
-        #this might be unreliable. use the existence of paired file
-        exp['library_layout'] = "PAIRED" if safe_read(experiment_package, 'EXPERIMENT//LIBRARY_LAYOUT/PAIRED', index=0) != "" else "SINGLE" 
 
         # just assume one sample
         sample = safe_read(experiment_package, 'SAMPLE', index=0)
@@ -164,6 +230,21 @@ def get_run_ids(run_meta):
 
 def download_fastq_files(fasterq_dump_loc, output_dir, metadata, gzip_output=True):
 
+    #
+    # determine the list of ids to download
+    #
+    run_ids = [item['run_id'] for item in metadata]
+
+    #
+    # Prefetch ids.
+    #
+
+    cmd = ['prefetch'] + run_ids
+    try:
+        result = retry_subprocess_check_output(cmd, 10, 60);
+
+    except subprocess.CalledProcessError as e:
+        print >> sys.stderr,  "Prefetch failed with code " + str(e.returncode)
 
     # for each run, download the fastq file
     for item in metadata:
@@ -172,18 +253,21 @@ def download_fastq_files(fasterq_dump_loc, output_dir, metadata, gzip_output=Tru
         #
         # If not a pacbio run,  use the new fasterq-dump utility (faster, but doesn't have
         # filtering option which results in bigger files)
-        # Pacbio requires fastq-dump
+        #
+        # Pacbio requires fastq-dump, and we do not split files for it.
         #
         if item['platform_name'] == 'PACBIO_SMRT':
-            fasterq_dump_cmd = ['fastq-dump', '--outdir', output_dir,  '--split-files', run_id]
+            fasterq_dump_cmd = ['fastq-dump', '--outdir', output_dir,  run_id]
         else:
             fasterq_dump_cmd = [fasterq_dump_loc, '--outdir', output_dir,  '--split-files', '-f', run_id]
 
         try:
-            print 'executing \'' + str(fasterq_dump_cmd) + '\''
-            result = subprocess.check_output(fasterq_dump_cmd)
+            print >> sys.stderr, 'executing \'' + str(fasterq_dump_cmd) + '\''
+            result = retry_subprocess_check_output(fasterq_dump_cmd, 5, 60)
+
         except subprocess.CalledProcessError as e:
-            return_code = e.returncode
+            print >> sys.stderr,  "Download failed with code " + str(e.returncode)
+            sys.exit(e.returncode)
 
         # gzip the output; gzip will skip anything already zipped
         if gzip_output:
@@ -195,25 +279,25 @@ def download_fastq_files(fasterq_dump_loc, output_dir, metadata, gzip_output=Tru
 
     return
 
-def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly, compress_files, metadata_file):
+def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly, compress_files, metadata_file, sra_metadata_file):
 
     # ===== 1. Get the metadata for each run
-    metadata = get_accession_metadata(accession_id)
+    metadata = get_accession_metadata(accession_id, sra_metadata_file)
 
     # ===== 2. Get the fastq files for each run
     if not metaonly:
 
         download_fastq_files(fasterq_dump_loc, fastq_output_dir, metadata, gzip_output=compress_files)
-        print 'Fastq Filenames:'
-        print(glob.glob(fastq_output_dir+'/*.fastq*'))
+        print >> sys.stderr, 'Fastq Filenames:'
+        print >> sys.stderr, (glob.glob(fastq_output_dir+'/*.fastq*'))
         for run in metadata:
             run_id = run.get("run_id",None)
             files = glob.glob(os.path.join(fastq_output_dir,"*"+run_id+"*"))
             run['files']=[os.path.basename(f) for f in files]
 
     # ===== 3. Pack it into the output JSON
-    print 'Metadata:'
-    print json.dumps(metadata, indent=1)
+    print >> sys.stderr, 'Metadata:'
+    print >> sys.stderr, json.dumps(metadata, indent=1)
     if metadata_file:
         fp = file(metadata_file, "w")
         json.dump(metadata, fp, indent=2)
@@ -221,3 +305,27 @@ def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly
 
 
     # ===== 4. Add everything to the workspace (?)
+
+def retry_subprocess_check_output(cmd, n_retries, retry_sleep):
+    attempt = 0
+    failed = False
+    last_error = None
+
+    while attempt < n_retries:
+        attempt += 1
+        if failed:
+            time.sleep(retry_sleep)
+
+        failed = False
+        try:
+            print >> sys.stderr, "Attempt %d of %d at running %s" % (attempt, n_retries, cmd)
+            return subprocess.check_output(cmd)
+
+        except subprocess.CalledProcessError as e:
+            print >> sys.stderr, "Attempt %d of %d failed at running %s: %s" % (attempt, n_retries, cmd, e)
+            last_error = e
+            failed = True
+
+    print >> sys.stderr, "Failed after %s retries running %s" % (attempt, cmd)
+    raise last_error
+
