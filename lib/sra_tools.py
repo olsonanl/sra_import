@@ -91,9 +91,12 @@ def get_accession_metadata(accession_id, sra_metadata_file):
             rdata = {}
             rdata['run_id'] = safe_read(run, '@accession')[0]
             rdata['accession'] = rdata['run_id']
-            rdata['total_bases'] = int(safe_read(run, '@total_bases')[0])
-            rdata['total_spots'] = int(safe_read(run, '@total_spots')[0])
-            rdata['size'] = int(safe_read(run, '@size')[0])
+            try:
+                rdata['total_bases'] = int(safe_read(run, '@total_bases')[0])
+                rdata['total_spots'] = int(safe_read(run, '@total_spots')[0])
+                rdata['size'] = int(safe_read(run, '@size')[0])
+            except Exception as e:
+                print >> sys.stderr, "Data size not found"
             #
             # Try to pull the read length
             #
@@ -107,14 +110,20 @@ def get_accession_metadata(accession_id, sra_metadata_file):
             if stats:
                 stats = stats[0]
                 sattrib = stats.attrib
-                nreads = sattrib['nreads']
 
-                if nreads.isdigit():
-                    rdata['n_reads'] = int(nreads)
+                #
+                # nreads might lie. cf SRR6263255
+                #
+                nreads = 0
                 for read in stats:
                     rattr = read.attrib
+                    print >> sys.stderr, rattr
+                    if rattr.has_key('count') and int(rattr['count']) > 0:
+                        nreads += 1
                     if rattr.has_key('average') and not rdata.has_key('read_length'):
                         rdata['read_length'] = float(rattr['average'])
+                if nreads > 0:
+                    rdata['n_reads'] = nreads
             
 
             #
@@ -131,10 +140,10 @@ def get_accession_metadata(accession_id, sra_metadata_file):
             if rdata.has_key('read_length'):
                 calc_bases = rdata['read_length'] * rdata['n_reads'] * rdata['total_spots']
                 err = abs(calc_bases - rdata['total_bases']) / rdata['total_bases']
-                print "calc=%d val=%d %f" % (calc_bases, rdata['total_bases'], err)
+                print >> sys.stderr, "calc=%d val=%d %f" % (calc_bases, rdata['total_bases'], err)
                 
                 if err > 0.1:
-                    print "Bad size calculation"
+                    print >> sys.stderr, "Bad size calculation"
                 else:
                     if rdata.has_key('run_id'):
                         hlen = len(rdata['run_id']) + 50
@@ -253,7 +262,7 @@ def download_fastq_files(fasterq_dump_loc, output_dir, metadata, gzip_output=Tru
             fasterq_dump_cmd = [fasterq_dump_loc, '--outdir', output_dir,  '--split-files', '-f', run_id]
 
         try:
-            print 'executing \'' + str(fasterq_dump_cmd) + '\''
+            print >> sys.stderr, 'executing \'' + str(fasterq_dump_cmd) + '\''
             result = retry_subprocess_check_output(fasterq_dump_cmd, 5, 60)
 
         except subprocess.CalledProcessError as e:
@@ -279,16 +288,16 @@ def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly
     if not metaonly:
 
         download_fastq_files(fasterq_dump_loc, fastq_output_dir, metadata, gzip_output=compress_files)
-        print 'Fastq Filenames:'
-        print(glob.glob(fastq_output_dir+'/*.fastq*'))
+        print >> sys.stderr, 'Fastq Filenames:'
+        print >> sys.stderr, (glob.glob(fastq_output_dir+'/*.fastq*'))
         for run in metadata:
             run_id = run.get("run_id",None)
             files = glob.glob(os.path.join(fastq_output_dir,"*"+run_id+"*"))
             run['files']=[os.path.basename(f) for f in files]
 
     # ===== 3. Pack it into the output JSON
-    print 'Metadata:'
-    print json.dumps(metadata, indent=1)
+    print >> sys.stderr, 'Metadata:'
+    print >> sys.stderr, json.dumps(metadata, indent=1)
     if metadata_file:
         fp = file(metadata_file, "w")
         json.dump(metadata, fp, indent=2)
