@@ -36,7 +36,7 @@ def safe_read(element, xpath, index=None, xpath_fallback=None):
 
 
 def get_accession_metadata(accession_id, sra_metadata_file):
-
+    print "Getting accession: {}".format(str(accession_id))
     params = { 'save': 'efetch', 'db': 'sra', 'rettype': 'docset', 'term': accession_id }
     retry_count = 0
     while True:
@@ -90,6 +90,12 @@ def get_accession_metadata(accession_id, sra_metadata_file):
         for run in experiment_package.xpath('RUN_SET/RUN'):
             rdata = {}
             rdata['run_id'] = safe_read(run, '@accession')[0]
+            my_out = "run: {}, exp: {}, study: {}".format(rdata['run_id'], exp['exp_id'], exp['study_id'])
+            if rdata['run_id'] != accession_id and accession_id != exp['exp_id'] and accession_id != exp['study_id']:
+                print "Skipping -- " + my_out
+                continue
+            else:
+                print "Using -- " + my_out
             rdata['accession'] = rdata['run_id']
             try:
                 rdata['total_bases'] = int(safe_read(run, '@total_bases')[0])
