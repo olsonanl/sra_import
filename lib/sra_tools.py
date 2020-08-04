@@ -137,29 +137,36 @@ def get_accession_metadata(accession_id, sra_metadata_file):
             #
             # Validate first that total_spots * read_size * read_count = total_bases
             #
-            if not rdata.has_key('n_reads'):
-                if exp['library_layout'] == 'PAIRED':
-                    rdata['n_reads'] = 2
-                else:
-                    rdata['n_reads'] = 1
-
-            if rdata.has_key('read_length'):
-                calc_bases = rdata['read_length'] * rdata['n_reads'] * rdata['total_spots']
-                err = abs(calc_bases - rdata['total_bases']) / rdata['total_bases']
-                print >> sys.stderr, "calc=%d val=%d %f" % (calc_bases, rdata['total_bases'], err)
-                
-                if err > 0.1:
-                    print >> sys.stderr, "Bad size calculation"
-                else:
-                    if rdata.has_key('run_id'):
-                        hlen = len(rdata['run_id']) + 50
+            # It is possible for all of this to fail. Wrap the entire computation
+            # in a try-block; this means upstream computations will need to cope
+            # if possible with incomplete size data.
+            #
+            try:
+                if not rdata.has_key('n_reads'):
+                    if exp['library_layout'] == 'PAIRED':
+                        rdata['n_reads'] = 2
                     else:
-                        hlen = 40
-                        # header is 40 ish unless run_id is set; data size is read_length. Two header/data pairs per read,
-                        # total_spots of those per file, n_reads files.
-                        rdata['estimated_size'] = (hlen + rdata['read_length']) * 2 * rdata['n_reads'] * rdata['total_spots']
-                        
+                        rdata['n_reads'] = 1
 
+                if rdata.has_key('read_length'):
+                    calc_bases = rdata['read_length'] * rdata['n_reads'] * rdata['total_spots']
+                    err = abs(calc_bases - rdata['total_bases']) / rdata['total_bases']
+                    print >> sys.stderr, "calc=%d val=%d %f" % (calc_bases, rdata['total_bases'], err)
+                    
+                    if err > 0.1:
+                        print >> sys.stderr, "Bad size calculation"
+                    else:
+                        if rdata.has_key('run_id'):
+                            hlen = len(rdata['run_id']) + 50
+                        else:
+                            hlen = 40
+                            # header is 40 ish unless run_id is set; data size is read_length. Two header/data pairs per read,
+                            # total_spots of those per file, n_reads files.
+                            rdata['estimated_size'] = (hlen + rdata['read_length']) * 2 * rdata['n_reads'] * rdata['total_spots']
+                        
+                            
+            except Exception as e:
+                print >> sys.stderr, "Failed to compute size data"
             print(rdata)
             exp['runs'].append(rdata)
 
@@ -328,7 +335,7 @@ def retry_subprocess_check_output(cmd, n_retries, retry_sleep):
             return subprocess.check_output(cmd)
 
         except subprocess.CalledProcessError as e:
-            print >> sys.stderr, "Attempt %d of %d failed at running %s: %s" % (attempt, n_retries, cmd, e)
+            print >> sys.stderr, "Attempt %d of %d failed at running %s: %s (%s)" % (attempt, n_retries, cmd, e, e.output)
             last_error = e
             failed = True
 

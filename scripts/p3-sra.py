@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import argparse
 import sys
+from p3_error_reporting import report_error
 
 from sra_tools import download_sra_data
 
@@ -27,4 +28,6 @@ if __name__ == '__main__':
     if accession_id.startswith(acceptable_prefixes):
         download_sra_data(args.bin, args.out, accession_id, args.metaonly, args.gzip, args.metadata_file, args.sra_metadata_file)
     else:
-        sys.exit('Accession ID must start with: ' + ', '.join(acceptable_prefixes))
+        err = 'Accession ID must start with: ' + ', '.join(acceptable_prefixes)
+        report_error(err);
+        sys.exit(err)
