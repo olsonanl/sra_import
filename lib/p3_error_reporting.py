@@ -14,7 +14,7 @@ def report_error(error_message, overwrite=False):
             mode="w"
         else:
             mode="a"
-        fh = open(user_path, "a")
+        fh = open(user_path, mode)
         print(error_message, file=fh)
         fh.close()
     except Exception as e:
