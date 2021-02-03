@@ -1,4 +1,6 @@
 import subprocess
+import re
+import tempfile
 import csv
 import glob
 import json
@@ -62,6 +64,15 @@ def get_accession_metadata(accession_id, sra_metadata_file):
         print >> fp, etree.tostring(tree, pretty_print=True)
         fp.close()
     
+    return parse_accession_metadata(accession_id, tree)
+
+def parse_sra_xml(xml_fh):
+
+    parser = etree.XMLParser(remove_blank_text=True)
+    tree = etree.parse(xml_fh, parser)
+    return parse_accession_metadata(None, tree)
+
+def parse_accession_metadata(accession_id, tree):
 
     # step through the experiments
     exp_meta = []
@@ -76,12 +87,14 @@ def get_accession_metadata(accession_id, sra_metadata_file):
             if isinstance(exp['instrument_model'], list):
                 exp['instrument_model'] = exp['instrument_model'][0]
 
+        exp['design_description'] =''.join(safe_read(experiment_package, 'EXPERIMENT/DESIGN/DESIGN_DESCRIPTION/text()'))
         exp['study_id'] = safe_read(experiment_package, 'EXPERIMENT/STUDY_REF/@accession', index=0)
 
         for db in experiment_package.xpath('STUDY//XREF_LINK/DB/text()'):
             exp['study_'+db+'_ids'] = experiment_package.xpath('STUDY//XREF_LINK/ID/text()')
 
         exp['library_name'] = safe_read(experiment_package, 'EXPERIMENT//LIBRARY_NAME/text()', index=0)
+        exp['library_selection'] = safe_read(experiment_package, 'EXPERIMENT//LIBRARY_SELECTION/text()', index=0)
         exp['library_strategy'] = safe_read(experiment_package, 'EXPERIMENT//LIBRARY_STRATEGY/text()', index=0)
         #this might be unreliable. use the existence of paired file
         exp['library_layout'] = "PAIRED" if safe_read(experiment_package, 'EXPERIMENT//LIBRARY_LAYOUT/PAIRED', index=0) != "" else "SINGLE" 
@@ -90,12 +103,13 @@ def get_accession_metadata(accession_id, sra_metadata_file):
         for run in experiment_package.xpath('RUN_SET/RUN'):
             rdata = {}
             rdata['run_id'] = safe_read(run, '@accession')[0]
+            rdata['unavailable'] = safe_read(run, '@unavailable')[0]
             my_out = "run: {}, exp: {}, study: {}".format(rdata['run_id'], exp['exp_id'], exp['study_id'])
-            if rdata['run_id'] != accession_id and accession_id != exp['exp_id'] and accession_id != exp['study_id']:
-                print "Skipping -- " + my_out
+            if accession_id != None and rdata['run_id'] != accession_id and accession_id != exp['exp_id'] and accession_id != exp['study_id']:
+                print >> sys.stderr, "Skipping -- " + my_out
                 continue
             else:
-                print "Using -- " + my_out
+                print >> sys.stderr, "Using -- " + my_out
             rdata['accession'] = rdata['run_id']
             try:
                 rdata['total_bases'] = int(safe_read(run, '@total_bases')[0])
@@ -123,7 +137,7 @@ def get_accession_metadata(accession_id, sra_metadata_file):
                 nreads = 0
                 for read in stats:
                     rattr = read.attrib
-                    print >> sys.stderr, rattr
+                    # print >> sys.stderr, rattr
                     if rattr.has_key('count') and int(rattr['count']) > 0:
                         nreads += 1
                     if rattr.has_key('average') and not rdata.has_key('read_length'):
@@ -151,7 +165,7 @@ def get_accession_metadata(accession_id, sra_metadata_file):
                 if rdata.has_key('read_length'):
                     calc_bases = rdata['read_length'] * rdata['n_reads'] * rdata['total_spots']
                     err = abs(calc_bases - rdata['total_bases']) / rdata['total_bases']
-                    print >> sys.stderr, "calc=%d val=%d %f" % (calc_bases, rdata['total_bases'], err)
+                    # print >> sys.stderr, "calc=%d val=%d %f" % (calc_bases, rdata['total_bases'], err)
                     
                     if err > 0.1:
                         print >> sys.stderr, "Bad size calculation"
@@ -167,7 +181,7 @@ def get_accession_metadata(accession_id, sra_metadata_file):
                             
             except Exception as e:
                 print >> sys.stderr, "Failed to compute size data"
-            print(rdata)
+            # print(rdata)
             exp['runs'].append(rdata)
 
 
@@ -275,7 +289,7 @@ def download_fastq_files(fasterq_dump_loc, output_dir, metadata, gzip_output=Tru
             fasterq_dump_cmd = [fasterq_dump_loc, '--outdir', output_dir,  '--split-files', '-f', run_id]
 
         try:
-            print >> sys.stderr, 'executing \'' + str(fasterq_dump_cmd) + '\''
+            # print >> sys.stderr, 'executing \'' + str(fasterq_dump_cmd) + '\''
             result = retry_subprocess_check_output(fasterq_dump_cmd, 5, 60)
 
         except subprocess.CalledProcessError as e:
@@ -301,16 +315,16 @@ def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly
     if not metaonly:
 
         download_fastq_files(fasterq_dump_loc, fastq_output_dir, metadata, gzip_output=compress_files)
-        print >> sys.stderr, 'Fastq Filenames:'
-        print >> sys.stderr, (glob.glob(fastq_output_dir+'/*.fastq*'))
+        # print >> sys.stderr, 'Fastq Filenames:'
+        # print >> sys.stderr, (glob.glob(fastq_output_dir+'/*.fastq*'))
         for run in metadata:
             run_id = run.get("run_id",None)
             files = glob.glob(os.path.join(fastq_output_dir,"*"+run_id+"*"))
             run['files']=[os.path.basename(f) for f in files]
 
     # ===== 3. Pack it into the output JSON
-    print >> sys.stderr, 'Metadata:'
-    print >> sys.stderr, json.dumps(metadata, indent=1)
+    # print >> sys.stderr, 'Metadata:'
+    # print >> sys.stderr, json.dumps(metadata, indent=1)
     if metadata_file:
         fp = file(metadata_file, "w")
         json.dump(metadata, fp, indent=2)
@@ -330,15 +344,30 @@ def retry_subprocess_check_output(cmd, n_retries, retry_sleep):
             time.sleep(retry_sleep)
 
         failed = False
-        try:
-            print >> sys.stderr, "Attempt %d of %d at running %s" % (attempt, n_retries, cmd)
-            return subprocess.check_output(cmd)
+        #
+        # We run this with stdout/stderr to temp files so we can examine them.
+        #
+        
+        print >> sys.stderr, "Attempt %d of %d at running %s" % (attempt, n_retries, cmd)
+        out = tempfile.TemporaryFile()
+        err = tempfile.TemporaryFile()
+        ret =  subprocess.call(cmd, stderr=err)
+        print "ret=", ret
+        if ret == 0:
+            return
 
-        except subprocess.CalledProcessError as e:
-            print >> sys.stderr, "Attempt %d of %d failed at running %s: %s (%s)" % (attempt, n_retries, cmd, e, e.output)
-            last_error = e
-            failed = True
+        err.seek(0)
+        edata = err.read()
+        if re.search("failed to resolve", edata, re.MULTILINE):
+            print >> sys.stderr, "Invalid accession"
+            print >> sys.stderr, edata
+            raise RuntimeError("SRA resolution failure")
+        print >> sys.stderr, "Attempt %d of %d failed at running %s: %s" % (attempt, n_retries, cmd, ret)
+        print >> sys.stderr, edata
+        last_error = ret
+        failed = True
 
     print >> sys.stderr, "Failed after %s retries running %s" % (attempt, cmd)
-    raise last_error
+    raise ret
+
 
