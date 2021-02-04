@@ -103,7 +103,6 @@ def parse_accession_metadata(accession_id, tree):
         for run in experiment_package.xpath('RUN_SET/RUN'):
             rdata = {}
             rdata['run_id'] = safe_read(run, '@accession')[0]
-            rdata['unavailable'] = safe_read(run, '@unavailable')[0]
             my_out = "run: {}, exp: {}, study: {}".format(rdata['run_id'], exp['exp_id'], exp['study_id'])
             if accession_id != None and rdata['run_id'] != accession_id and accession_id != exp['exp_id'] and accession_id != exp['study_id']:
                 print >> sys.stderr, "Skipping -- " + my_out
@@ -349,7 +348,6 @@ def retry_subprocess_check_output(cmd, n_retries, retry_sleep):
         #
         
         print >> sys.stderr, "Attempt %d of %d at running %s" % (attempt, n_retries, cmd)
-        out = tempfile.TemporaryFile()
         err = tempfile.TemporaryFile()
         ret =  subprocess.call(cmd, stderr=err)
         print "ret=", ret
