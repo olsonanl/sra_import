@@ -39,10 +39,12 @@ def safe_read(element, xpath, index=None, xpath_fallback=None):
 
 def get_accession_metadata(accession_id, sra_metadata_file):
     print "Getting accession: {}".format(str(accession_id))
-    params = { 'save': 'efetch', 'db': 'sra', 'rettype': 'docset', 'term': accession_id }
+    params = { 'db': 'sra', 'rettype': 'docset', 'id': accession_id }
+    # params = { 'save': 'efetch', 'db': 'sra', 'rettype': 'docset', 'term': accession_id }
     retry_count = 0
     while True:
-        ret = requests.get('https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi', params=params)
+        ret = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi', params=params)
+        # ret = requests.get('https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi', params=params)
         if ret.status_code == 429:
             delay = retry_count + random.uniform(0, 2)
             print >> sys.stderr,  "Delaying for 429 error " + str(delay)
@@ -54,6 +56,7 @@ def get_accession_metadata(accession_id, sra_metadata_file):
         else:
             break
 
+    #print("GOT: ", ret, params);
     parser = etree.XMLParser(remove_blank_text=True)
     result_obj = StringIO.StringIO(ret.text)
     tree = etree.parse(result_obj, parser)
@@ -223,7 +226,8 @@ def get_runinfo(run_accession):
     """ take sra run accession (like SRR123456)
     return dictionary with keys like: spots,bases,spots_with_mates,avgLength,size_MB,AssemblyName,download_path.....
     """
-    runinfo_url = "https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=runinfo&term="+run_accession
+    runinfo_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=sra&rettype=runinfo&id="+run_accession
+    # runinfo_url = "https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=runinfo&term="+run_accession
     r = urllib2.urlopen(runinfo_url)
     lines = r.read().split("\n")
     keys   = lines[0].split(",")
@@ -285,7 +289,10 @@ def download_fastq_files(fasterq_dump_loc, output_dir, metadata, gzip_output=Tru
         if item['platform_name'] == 'PACBIO_SMRT':
             fasterq_dump_cmd = ['fastq-dump', '--outdir', output_dir,  run_id]
         else:
-            fasterq_dump_cmd = [fasterq_dump_loc, '--outdir', output_dir,  '--split-files', '-f', run_id]
+            tmpdir = os.getenv("TMPDIR")
+            if tmpdir is None:
+                tmpdir = "/tmp"
+            fasterq_dump_cmd = [fasterq_dump_loc, '-t', tmpdir, '--outdir', output_dir,  '--split-files', '-f', run_id]
 
         try:
             # print >> sys.stderr, 'executing \'' + str(fasterq_dump_cmd) + '\''
