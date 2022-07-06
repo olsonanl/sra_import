@@ -44,6 +44,7 @@ def get_accession_metadata(accession_id, sra_metadata_file):
     retry_count = 0
     while True:
         ret = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi', params=params)
+
         # ret = requests.get('https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi', params=params)
         if ret.status_code == 429:
             delay = retry_count + random.uniform(0, 2)
@@ -58,7 +59,10 @@ def get_accession_metadata(accession_id, sra_metadata_file):
 
     #print("GOT: ", ret, params);
     parser = etree.XMLParser(remove_blank_text=True)
-    result_obj = StringIO.StringIO(ret.text)
+    if type(ret.text) == unicode:
+        result_obj = StringIO.StringIO(ret.text.encode('utf-8'));
+    else:
+        result_obj = StringIO.StringIO(ret.text);
     tree = etree.parse(result_obj, parser)
 
     # print it out just for fun
