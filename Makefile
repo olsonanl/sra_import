@@ -4,6 +4,9 @@ include $(TOP_DIR)/tools/Makefile.common
 TARGET ?= /kb/deployment
 DEPLOY_RUNTIME ?= /kb/runtime
 
+WRAP_PYTHON_TOOL = wrap_python3
+WRAP_PYTHON_SCRIPT = bash $(TOOLS_DIR)/$(WRAP_PYTHON3_TOOL).sh
+
 SRC_PYTHON = $(wildcard scripts/*.py)
 
 all: bin 

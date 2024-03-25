@@ -48,7 +48,7 @@ def get_accession_metadata(accession_id, sra_metadata_file):
         # ret = requests.get('https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi', params=params)
         if ret.status_code == 429:
             delay = retry_count + random.uniform(0, 2)
-            print(  "Delaying for 429 error " + str(delay), file=sys.stderr)
+            print(f"Delaying {delay} for 429 error", file=sys.stderr)
             time.sleep(delay)
             retry_count = retry_count + 1
         elif ret.status_code != 200:
@@ -302,7 +302,7 @@ def download_fastq_files(fasterq_dump_loc, output_dir, metadata, gzip_output=Tru
             fasterq_dump_cmd = [fasterq_dump_loc, '-t', tmpdir, '--outdir', output_dir,  '--split-files', '-f', run_id]
 
         try:
-            # print( 'executing \'' + str(fasterq_dump_cmd) + '\'', file=sys.stderr)
+            print( 'executing \'' + str(fasterq_dump_cmd) + '\'', file=sys.stderr)
             result = retry_subprocess_check_output(fasterq_dump_cmd, 5, 60)
 
         except subprocess.CalledProcessError as e:
