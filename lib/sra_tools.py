@@ -38,7 +38,7 @@ def safe_read(element, xpath, index=None, xpath_fallback=None):
 
 
 def get_accession_metadata(accession_id, sra_metadata_file):
-    print "Getting accession: {}".format(str(accession_id))
+    print ("Getting accession: {}".format(str(accession_id)))
     params = { 'db': 'sra', 'rettype': 'docset', 'id': accession_id }
     # params = { 'save': 'efetch', 'db': 'sra', 'rettype': 'docset', 'term': accession_id }
     retry_count = 0
@@ -48,7 +48,7 @@ def get_accession_metadata(accession_id, sra_metadata_file):
         # ret = requests.get('https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi', params=params)
         if ret.status_code == 429:
             delay = retry_count + random.uniform(0, 2)
-            print >> sys.stderr,  "Delaying for 429 error " + str(delay)
+            sys.stderr.write(f'Delaying for 429 error {str(delay)}\n')
             time.sleep(delay)
             retry_count = retry_count + 1
         elif ret.status_code != 200:
@@ -67,9 +67,8 @@ def get_accession_metadata(accession_id, sra_metadata_file):
 
     # print it out just for fun
     if sra_metadata_file:
-        fp = file(sra_metadata_file, "w")
-        print >> fp, etree.tostring(tree, pretty_print=True)
-        fp.close()
+        with open(sra_metadata_file,'w') as fp:
+            fp.write(etree.tostring(tree, pretty_print=True))
     
     return parse_accession_metadata(accession_id, tree)
 
@@ -112,17 +111,17 @@ def parse_accession_metadata(accession_id, tree):
             rdata['run_id'] = safe_read(run, '@accession')[0]
             my_out = "run: {}, exp: {}, study: {}".format(rdata['run_id'], exp['exp_id'], exp['study_id'])
             if accession_id != None and rdata['run_id'] != accession_id and accession_id != exp['exp_id'] and accession_id != exp['study_id']:
-                print >> sys.stderr, "Skipping -- " + my_out
+                sys.stderr.write(f"Skipping -- {my_out}\n")
                 continue
             else:
-                print >> sys.stderr, "Using -- " + my_out
+                sys.stderr.write(f"Using -- {my_out}\n")
             rdata['accession'] = rdata['run_id']
             try:
                 rdata['total_bases'] = int(safe_read(run, '@total_bases')[0])
                 rdata['total_spots'] = int(safe_read(run, '@total_spots')[0])
                 rdata['size'] = int(safe_read(run, '@size')[0])
             except Exception as e:
-                print >> sys.stderr, "Data size not found"
+                sys.stderr.write("Data size not found\n")
             #
             # Try to pull the read length
             #
@@ -174,7 +173,7 @@ def parse_accession_metadata(accession_id, tree):
                     # print >> sys.stderr, "calc=%d val=%d %f" % (calc_bases, rdata['total_bases'], err)
                     
                     if err > 0.1:
-                        print >> sys.stderr, "Bad size calculation"
+                        sys.stderr.write("Bad size calculation\n")
                     else:
                         if rdata.has_key('run_id'):
                             hlen = len(rdata['run_id']) + 50
@@ -186,7 +185,7 @@ def parse_accession_metadata(accession_id, tree):
                         
                             
             except Exception as e:
-                print >> sys.stderr, "Failed to compute size data"
+                sys.stderr.write("Failed to compute size data\n")
             # print(rdata)
             exp['runs'].append(rdata)
 
@@ -278,7 +277,7 @@ def download_fastq_files(fasterq_dump_loc, output_dir, metadata, gzip_output=Tru
         result = retry_subprocess_check_output(cmd, 10, 60);
 
     except subprocess.CalledProcessError as e:
-        print >> sys.stderr,  "Prefetch failed with code " + str(e.returncode)
+        sys.stderr.write(f"Prefetch failed with code {str(e.returncode)}\n")
 
     # for each run, download the fastq file
     for item in metadata:
@@ -303,8 +302,7 @@ def download_fastq_files(fasterq_dump_loc, output_dir, metadata, gzip_output=Tru
             result = retry_subprocess_check_output(fasterq_dump_cmd, 5, 60)
 
         except subprocess.CalledProcessError as e:
-            print >> sys.stderr,  "Download failed with code " + str(e.returncode)
-            sys.exit(e.returncode)
+            sys.stderr.write(f"Download failed with code {str(e.returncode)}\n")
 
         # gzip the output; gzip will skip anything already zipped
         if gzip_output:
@@ -358,25 +356,25 @@ def retry_subprocess_check_output(cmd, n_retries, retry_sleep):
         # We run this with stdout/stderr to temp files so we can examine them.
         #
         
-        print >> sys.stderr, "Attempt %d of %d at running %s" % (attempt, n_retries, cmd)
+        sys.stderr.write("Attempt {} of {} at running {}\n".format(attempt, n_retries, cmd))
         err = tempfile.TemporaryFile()
         ret =  subprocess.call(cmd, stderr=err)
-        print "ret=", ret
+        sys.stderr.write(f"ret={ret}\n")
         if ret == 0:
             return
 
         err.seek(0)
         edata = err.read()
         if re.search("failed to resolve", edata, re.MULTILINE):
-            print >> sys.stderr, "Invalid accession"
-            print >> sys.stderr, edata
+            sys.stderr.write("Invalid accession\n")
+            sys.stderr.write(f"{edata}\n")
             raise RuntimeError("SRA resolution failure")
-        print >> sys.stderr, "Attempt %d of %d failed at running %s: %s" % (attempt, n_retries, cmd, ret)
-        print >> sys.stderr, edata
+        sys.stderr.write("Attempt {} of {} failed at running {}: {}\n".format(attempt, n_retries, cmd, ret))
+        sys.stderr.write(f"{edata}\n")
         last_error = ret
         failed = True
 
-    print >> sys.stderr, "Failed after %s retries running %s" % (attempt, cmd)
+    sys.stderr.write("Failed after {} retries running {}\n".format(attempt, cmd))
     raise ret
 
 
