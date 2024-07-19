@@ -59,11 +59,7 @@ def get_accession_metadata(accession_id, sra_metadata_file):
 
     #print("GOT: ", ret, params);
     parser = etree.XMLParser(remove_blank_text=True)
-    if type(ret.text) == unicode:
-        result_obj = StringIO.StringIO(ret.text.encode('utf-8'));
-    else:
-        result_obj = StringIO.StringIO(ret.text);
-    tree = etree.parse(result_obj, parser)
+    tree = etree.fromstring(ret.text.encode('ascii'))
 
     # print it out just for fun
     if sra_metadata_file:
@@ -142,10 +138,10 @@ def parse_accession_metadata(accession_id, tree):
                 nreads = 0
                 for read in stats:
                     rattr = read.attrib
-                    # print >> sys.stderr, rattr
-                    if rattr.has_key('count') and int(rattr['count']) > 0:
+                    # print(rattr, file=sys.stderr)
+                    if 'count' in rattr and int(rattr['count']) > 0:
                         nreads += 1
-                    if rattr.has_key('average') and not rdata.has_key('read_length'):
+                    if 'average' in rattr and not 'read_length' in rdata:
                         rdata['read_length'] = float(rattr['average'])
                 if nreads > 0:
                     rdata['n_reads'] = nreads
@@ -161,21 +157,21 @@ def parse_accession_metadata(accession_id, tree):
             # if possible with incomplete size data.
             #
             try:
-                if not rdata.has_key('n_reads'):
+                if not 'n_reads' in rdata:
                     if exp['library_layout'] == 'PAIRED':
                         rdata['n_reads'] = 2
                     else:
                         rdata['n_reads'] = 1
 
-                if rdata.has_key('read_length'):
+                if 'read_length' in rdata:
                     calc_bases = rdata['read_length'] * rdata['n_reads'] * rdata['total_spots']
                     err = abs(calc_bases - rdata['total_bases']) / rdata['total_bases']
-                    # print >> sys.stderr, "calc=%d val=%d %f" % (calc_bases, rdata['total_bases'], err)
+                    # print("calc=%d val=%d %f" % (calc_bases, rdata['total_bases'], err),file=sys.stderr)
                     
                     if err > 0.1:
                         sys.stderr.write("Bad size calculation\n")
                     else:
-                        if rdata.has_key('run_id'):
+                        if 'run_id' in rdata:
                             hlen = len(rdata['run_id']) + 50
                         else:
                             hlen = 40
@@ -331,13 +327,11 @@ def download_sra_data(fasterq_dump_loc, fastq_output_dir, accession_id, metaonly
             run['files']=[os.path.basename(f) for f in files]
 
     # ===== 3. Pack it into the output JSON
-    # print >> sys.stderr, 'Metadata:'
-    # print >> sys.stderr, json.dumps(metadata, indent=1)
+    # print('Metadata:',file=sys.stderr)
+    # print(json.dumps(metadata, indent=1),file=sys.stderr)
     if metadata_file:
-        fp = file(metadata_file, "w")
-        json.dump(metadata, fp, indent=2)
-        fp.close()
-
+        with open(metadata_file,'w') as fp:
+            json.dump(metadata, fp, indent=2)
 
     # ===== 4. Add everything to the workspace (?)
 
