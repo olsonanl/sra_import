@@ -14,7 +14,7 @@ import sys
 import requests
 
 import shutil
-import urllib2
+from urllib.request import urlopen
 
 def safe_read(element, xpath, index=None, xpath_fallback=None):
 
@@ -231,7 +231,7 @@ def get_runinfo(run_accession):
     """
     runinfo_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=sra&rettype=runinfo&id="+run_accession
     # runinfo_url = "https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi?save=efetch&db=sra&rettype=runinfo&term="+run_accession
-    r = urllib2.urlopen(runinfo_url)
+    r = urlopen(runinfo_url)
     lines = r.read().split("\n")
     keys   = lines[0].split(",")
     values = lines[1].split(",")
@@ -244,7 +244,7 @@ def ftp_download_single_run(run_accession):
     """
     sra_file_url = "ftp://ftp-trace.ncbi.nih.gov/sra/sra-instant/reads/ByRun/sra/%s/%s/%s/%s.sra"%(run_accession[:3], run_accession[:6], run_accession, run_accession)
     with open(run_accession+".sra", 'wb') as OUT:
-        response = urllib2.urlopen(sra_file_url)
+        response = urlopen(sra_file_url)
         shutil.copyfileobj(response, OUT)
 
 def fastqDumpExistingSraFile(file_name, splitFiles = False):
