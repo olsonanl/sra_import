@@ -8,7 +8,7 @@ import os
 import time
 import random
 from collections import OrderedDict
-import StringIO
+from io import StringIO
 from lxml import etree
 import sys
 import requests
