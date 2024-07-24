@@ -44,11 +44,12 @@ def get_accession_metadata(accession_id, sra_metadata_file):
     retry_count = 0
     while True:
         ret = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi', params=params)
+        return_code = ret.status_code
 
         # ret = requests.get('https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi', params=params)
-        if ret.status_code == 429:
+        if ret.status_code == 429 or ret.status_code == 400:
             delay = retry_count + random.uniform(0, 2)
-            sys.stderr.write(f'Delaying for 429 error {str(delay)}\n')
+            sys.stderr.write(f'Delaying for HTML code {ret.status_code}  error {str(delay)}\n')
             time.sleep(delay)
             retry_count = retry_count + 1
         elif ret.status_code != 200:
@@ -57,9 +58,9 @@ def get_accession_metadata(accession_id, sra_metadata_file):
         else:
             break
 
-    #print("GOT: ", ret, params);
+    # print("GOT: ", return_code, ret.text, params);
     parser = etree.XMLParser(remove_blank_text=True)
-    tree = etree.fromstring(ret.text.encode('ascii'))
+    tree = etree.XML(ret.content);
 
     # print it out just for fun
     if sra_metadata_file:
