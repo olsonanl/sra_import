@@ -63,7 +63,7 @@ def get_accession_metadata(accession_id, sra_metadata_file):
 
     # print it out just for fun
     if sra_metadata_file:
-        with open(sra_metadata_file,'w') as fp:
+        with open(sra_metadata_file,'wb') as fp:
             fp.write(etree.tostring(tree, pretty_print=True))
     
     return parse_accession_metadata(accession_id, tree)
