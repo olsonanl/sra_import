@@ -352,7 +352,7 @@ def retry_subprocess_check_output(cmd, n_retries, retry_sleep):
         #
         
         sys.stderr.write("Attempt {} of {} at running {}\n".format(attempt, n_retries, cmd))
-        err = tempfile.TemporaryFile()
+        err = tempfile.TemporaryFile(mode='w+')
         ret =  subprocess.call(cmd, stderr=err)
         sys.stderr.write(f"ret={ret}\n")
         if ret == 0:
