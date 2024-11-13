@@ -48,8 +48,13 @@ def get_accession_metadata(accession_id, sra_metadata_file):
 
         # ret = requests.get('https://trace.ncbi.nlm.nih.gov/Traces/sra/sra.cgi', params=params)
         if ret.status_code == 429 or ret.status_code == 400:
+            #
+            # Check for error return in status 400
+            #
+            if 'ID list is empty' in str(ret.content):
+                break
             delay = retry_count + random.uniform(0, 2)
-            sys.stderr.write(f'Delaying for HTML code {ret.status_code}  error {str(delay)}\n')
+            sys.stderr.write(f'Delaying for HTML code {ret.status_code} error {str(delay)}\n{ret.content}')
             time.sleep(delay)
             retry_count = retry_count + 1
         elif ret.status_code != 200:
